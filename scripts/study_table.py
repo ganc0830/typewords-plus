@@ -12,6 +12,7 @@ TABLE_FORMATS = {"xlsx", "xls", "xlsm", "ods", "csv", "tsv"}
 EN_HEADERS = {"english", "englishtext", "englishword", "英文", "英语", "英文原文", "英文单词", "英文例句", "英文句子",
               "word", "words", "term", "sentence", "example", "text", "source",
               "单词", "词汇", "原文", "句子", "例句"}
+WORD_HEADERS = {"word", "words", "englishword", "term", "headword", "单词", "英文单词", "词汇", "词条", "术语", "英文术语"}
 ZH_HEADERS = {"chinese", "chinesetranslation", "中文", "中文释义", "中文翻译", "中文译文", "中文意思", "注解",
               "meaning", "definition", "translation", "translate", "译文", "释义", "翻译", "意思"}
 LATIN = re.compile(r"[A-Za-z]")
@@ -112,12 +113,14 @@ def cell_text(value):
     return " ".join(value.split()) if isinstance(value, str) else ""
 
 
-def columns(rows):
-    """优先识别常见表头，缺少表头时用样本中英文和汉字的分布选列。"""
+def columns(rows, words=False):
+    """通过表头或语言分布选列，词书模式优先选择词头列。"""
     source = translation = header = None
     for index, row in enumerate(rows[:5]):
         labels = [re.sub(r"[\s_-]", "", cell_text(value).casefold()) for value in row]
-        source = next((i for i, label in enumerate(labels) if label in EN_HEADERS), None)
+        source = next((i for i, label in enumerate(labels) if words and label in WORD_HEADERS), None)
+        if source is None:
+            source = next((i for i, label in enumerate(labels) if label in EN_HEADERS), None)
         translation = next((i for i, label in enumerate(labels) if label in ZH_HEADERS), None)
         if source is not None or translation is not None:
             header = index
@@ -137,8 +140,8 @@ def columns(rows):
     return source, translation, header
 
 
-def import_table(raw, kind):
-    """按工作表与行顺序分课，使用对应段落保存原文、译文及空译文位置。"""
+def import_table(raw, kind, words=False):
+    """按工作表及行序配对内容，words 决定存在多种表头时的英文选列。"""
     if len(raw) > 16 * 1024 * 1024:
         return {"error": "表格超过 16 MB，请拆成较小的文件。"}
     sheets = delimited_rows(raw, kind) if kind in {"csv", "tsv"} else workbook_rows(raw, kind)
@@ -148,7 +151,7 @@ def import_table(raw, kind):
             return {"error": "工作表范围过大，请拆分或删除多余空白行列。"}
         iterator = iter(rows)
         sample = list(islice(iterator, 30))
-        source, translation, header = columns(sample)
+        source, translation, header = columns(sample, words)
         if source is None:
             continue
         pairs = []

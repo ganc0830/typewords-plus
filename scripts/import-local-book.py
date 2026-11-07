@@ -272,6 +272,98 @@ def lessons(sections):
     return articles
 
 
+def pdf_word_rows(raw):
+    """按 PDF 文字层的行读取词头与释义，跳过不符合词表结构的正文。"""
+    from pypdf import PdfReader
+
+    if not raw.startswith(b"%PDF-"):
+        yield "", "请选择有效的 PDF 文件。"
+        return
+    reader = PdfReader(io.BytesIO(raw))
+    if reader.is_encrypted and not reader.decrypt(""):
+        yield "", "PDF 已加密，请选择可直接打开的版本。"
+        return
+    if len(reader.pages) > 6000:
+        yield "", "PDF 超过 6000 页，请分卷导入。"
+        return
+    headword = re.compile(r"\(?[A-Za-z][A-Za-z0-9_().,'’/+&-]*(?: [A-Za-z0-9(][A-Za-z0-9_().,'’/+&-]*){0,7}")
+    separator = re.compile(r"[ \t]*(?:->|[:：|→])[ \t]*|\s+[-–—]\s+|\s{2,}|\t|(?=[\u3400-\u9fff])|"
+                           r"(?<!\S)(?=(?:adj|adv|prep|pron|conj|int|det|aux|vt|vi|n|v)\.\s*)", re.I)
+    table_header = re.compile(r"(?:单词|术语|英文|word|term)[^\n]*(?:释义|中文|译文|meaning|definition)", re.I)
+    row_number = re.compile(r"^\s*\d+[.)、]?\s+(?=\S)")
+    characters = 0
+    for page in reader.pages:
+        # 使用排版列间距区分词头、音标和释义，避免将它们压成一串。
+        content = page.extract_text(extraction_mode="layout", layout_mode_space_vertically=False) or ""
+        characters += len(content)
+        if characters > MAX_TEXT:
+            yield "", "PDF 文字过长，请分卷导入。"
+            return
+        lines = content.splitlines()
+        tabular = any(table_header.search(line) for line in lines[:5])
+        if tabular and any("序号" in line for line in lines[:5]):
+            # 序号可能垂直居中。按列的位置区分词头和折行释义，避免把释义片段当成词。
+            starts = [match.end() for line in lines if (match := row_number.match(line))
+                      and re.match(r"\(?[A-Za-z]", line[match.end():])]
+            word_column = min(starts, default=0)
+            table_lines = []
+            for line in lines:
+                number = row_number.match(line)
+                offset = number.end() if number else len(line) - len(line.lstrip())
+                value = line[offset:].strip()
+                if offset <= word_column + 2 and re.match(r"\(?[A-Za-z]", value):
+                    table_lines.append(value)
+                elif table_lines and value and not value.isdigit():
+                    table_lines[-1] += " " + value
+            if table_lines:
+                lines = table_lines
+        for line in lines:
+            line = re.sub(r"^\s*(?:\d+[.)、]?\s+|[•●]\s*)", "", line).strip()
+            if (line.lower().startswith(("https://", "http://"))
+                    or re.fullmatch(r"[A-Za-z]\s+\d+\s*条(?:[（(].*)?", line)):
+                continue
+            line = re.sub(r"(?<=\w)\s+/(?:[^/]*[^\x00-\x7f][^/]*)/", " ", line)
+            parts = separator.split(line, maxsplit=1)
+            word = " ".join(parts[0].split())
+            meaning = " ".join(parts[1].split()) if len(parts) == 2 else ""
+            if headword.fullmatch(word) and (meaning or " " not in word or tabular):
+                yield word, meaning
+
+
+def import_words(raw, kind):
+    """复用表格原文及译文配对，转换成词书行并保留同词的不同释义。"""
+    if kind == "pdf":
+        rows = pdf_word_rows(raw)
+    else:
+        table = import_table(raw, kind, words=True)
+        if "error" in table:
+            return table
+        rows = (pair for lesson in table["articles"] for pair in
+                zip(lesson["text"].split("\n\n"), lesson["textTranslate"].split("\n\n")))
+
+    words, skipped = {}, 0
+    for word, meaning in rows:
+        if not word:
+            return {"error": meaning}
+        if len(word) > 100:
+            skipped += 1
+            continue
+        key = word.casefold()
+        if key not in words:
+            words[key] = (word, {})
+        if meaning:
+            words[key][1][meaning] = None
+        if len(words) > 50_000:
+            return {"error": "词书最多导入 50,000 个词条，请拆分后重试。"}
+    if not words:
+        message = "未识别到词条，请检查英文单词列。"
+        if kind == "pdf":
+            message = "未识别到词条。PDF 请使用有文字层且每行一个词条的词表，扫描版请先做 OCR。"
+        return {"error": message}
+    return {"format": kind.upper(), "skipped": skipped,
+            "words": [{"word": word, "meanings": list(meanings)} for word, meanings in words.values()]}
+
+
 def main():
     """固定 stdin/stdout 协议，返回可展示的错误且不输出原书正文到日志。"""
     raw = sys.stdin.buffer.read(MAX_FILE + 1)
@@ -282,6 +374,9 @@ def main():
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             requested = os.environ.get("TYPEWORDS_BOOK_FORMAT", "")
+            if os.environ.get("TYPEWORDS_IMPORT_WORDS") == "1" and (requested == "pdf" or requested in TABLE_FORMATS):
+                print(json.dumps(import_words(raw, requested), ensure_ascii=False))
+                return
             if requested in TABLE_FORMATS:
                 print(json.dumps(import_table(raw, requested), ensure_ascii=False))
                 return

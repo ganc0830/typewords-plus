@@ -11,3 +11,6 @@ export const studyFileTypes = {
   csv: 'text/csv',
   tsv: 'text/tab-separated-values',
 } as const
+
+/** 词书仅从表格行或 PDF 词条提取，文章格式仍由书籍导入处理。 */
+export const wordFileTypes = ['xlsx', 'xls', 'xlsm', 'ods', 'csv', 'tsv', 'pdf'] as const

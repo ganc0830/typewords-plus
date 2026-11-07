@@ -12,8 +12,13 @@ from pathlib import Path
 
 def load_kokoro(directory):
     """使用本地 ONNX 权重和音色库，限制 CPU 线程。"""
+    import espeakng_loader
     from kokoro_onnx import Kokoro
     from onnxruntime import InferenceSession, SessionOptions
+
+    espeak_data = Path(espeakng_loader.get_data_path()).resolve()
+    if sys.platform == "win32" and not str(espeak_data).isascii():
+        use_relative_espeak_data(espeak_data)
 
     options = SessionOptions()
     options.intra_op_num_threads = 4
@@ -22,6 +27,24 @@ def load_kokoro(directory):
     options.add_session_config_entry("session.intra_op.allow_spinning", "0")
     session = InferenceSession(str(directory / "kokoro-v1.0.fp16.onnx"), options, providers=["CPUExecutionProvider"])
     return Kokoro.from_session(session, str(directory / "voices-v1.0.bin"))
+
+
+def use_relative_espeak_data(directory):
+    """让 Windows eSpeak DLL 在独立语音进程内使用 ASCII 相对数据路径。"""
+    from phonemizer.backend.espeak.api import EspeakAPI
+
+    os.chdir(directory.parent)
+    original = EspeakAPI._data_path_argument
+
+    def data_path_argument(path, version, tempdir=None):
+        """保留 phonemizer 的数据校验，仅替换传入 DLL 的路径字节。"""
+        argument = original(path, version, tempdir)
+        if Path(path) == directory and (directory / "phontab").is_file():
+            return directory.name.encode("ascii")
+        return argument
+
+    # 只影响此 Kokoro 子进程，不改第三方包文件或系统环境。
+    EspeakAPI._data_path_argument = staticmethod(data_path_argument)
 
 
 def load_chatterbox(directory):

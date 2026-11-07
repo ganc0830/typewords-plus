@@ -125,6 +125,9 @@ watch(dict_list, val => {
           </BaseIcon>
         </div>
       </div>
+      <div class="mt-2 flex justify-end">
+        <NuxtLink class="color-link" to="/import">从表格或 PDF 导入词书</NuxtLink>
+      </div>
       <div class="mt-4" v-if="searchKey">
         <DictList
           v-if="searchList.length"

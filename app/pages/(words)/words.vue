@@ -822,6 +822,7 @@ onUnmounted(() => {
           <div class="color-link cursor-pointer" @click="nav('/dict', { isAdd: true })">
             {{ $t('create_personal_dict') }}
           </div>
+          <NuxtLink class="color-link" to="/import">导入词书</NuxtLink>
         </div>
       </div>
       <div class="flex gap-4 flex-wrap mt-4">

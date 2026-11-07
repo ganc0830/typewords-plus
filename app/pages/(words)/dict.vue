@@ -576,6 +576,9 @@ defineRender(() => {
                   {$t('create_copy')}
                 </BaseButton>
               )}
+              {editable && (
+                <BaseButton type="info" onClick={goImportPage}>导入词条</BaseButton>
+              )}
               <BaseButton loading={studyLoading || loading} type="info" onClick={startTest}>
                 {$t('test')}
               </BaseButton>
@@ -615,7 +618,6 @@ defineRender(() => {
                 onDel={batchDel}
                 onSort={onSort}
                 onAdd={addWord}
-                onImport={goImportPage}
                 onExportXlsx={exportXlsxData}
                 onExportJson={exportJsonData}
                 exportXlsxLoading={exportXlsxLoading}
@@ -779,6 +781,13 @@ defineRender(() => {
               onSubmit={handleSubmit}
             />
           </div>
+          {isAdd && !_copyData && (
+            <div class="center mt-4">
+              <BaseButton type="info" onClick={() => router.push('/import')}>
+                从表格或 PDF 导入词书
+              </BaseButton>
+            </div>
+          )}
         </div>
       )}
 
