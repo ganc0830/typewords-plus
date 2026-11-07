@@ -271,15 +271,20 @@ export function useGetDict() {
       let dictId = route.params.id
       //先在自己的词典列表里面找，如果没有再在资源列表里面找
       dict = store.article.bookList.find(v => isDictIdMatch(v, dictId))
-      let r = await fetch(resourceWrap(DICT_LIST.ARTICLE.ALL))
-      let dict_list = await r.json()
-      if (!dict) dict = dict_list.flat().find(v => isDictIdMatch(v, dictId)) as Dict
+      if (!dict) {
+        const response = await fetch(resourceWrap(DICT_LIST.ARTICLE.ALL))
+        const resources = await response.json()
+        dict = resources.flat().find(v => isDictIdMatch(v, dictId)) as Dict
+      }
     }
     if (dict && dict.id) {
       if (!dict?.articles?.length && !dict?.custom && !dict?.system && !dict?.is_default) {
         fetching = true
         let r = await _getDictDataByUrl(dict, DictType.article)
         runtimeStore.editDict = r
+      } else {
+        // 从刷新后的个人书籍列表恢复全文，直接打开本地书籍地址也能继续学习。
+        runtimeStore.editDict = dict
       }
       if (store.article.bookList.find(book => book.id === runtimeStore.editDict.id)) {
       }

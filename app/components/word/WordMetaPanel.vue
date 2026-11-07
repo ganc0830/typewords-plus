@@ -14,7 +14,7 @@ import { getDefaultWord } from '@/core/types/func.ts'
 import { useSettingStore } from '@/core/stores/setting.ts'
 import ClickableEnglishText from '@/components/word/ClickableEnglishText.vue'
 import ClickableWord from '@/components/word/ClickableWord.vue'
-import { Toast, VolumeIcon } from '@/base'
+import { VolumeIcon } from '@/base'
 import { useI18n } from 'vue-i18n'
 import TranslationList from '@/components/word/TranslationList.vue'
 import TypingSentence from '~/components/practice-sentences/TypingSentence.vue'
@@ -24,8 +24,7 @@ import { SENTENCE_PLAY_SHORTCUT_KEYS, ShortcutKey } from '@/core'
 import { WordPracticeType } from '@/core/types/enum.ts'
 import { computed } from 'vue'
 import { watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { getBrowserKey, useTTsPlayAudio } from '@/core/hooks/sound.ts'
+import { useTTsPlayAudio } from '@/core/hooks/sound.ts'
 
 const { t: $t } = useI18n()
 
@@ -44,10 +43,8 @@ const emit = defineEmits<{
 }>()
 
 const settingStore = useSettingStore()
-const router = useRouter()
 const ttsPlayAudio = useTTsPlayAudio()
 let highlightedSentenceIndex = $ref(-1)
-let ttsVoiceHintShown = false
 const showDetails = computed(
   () =>
     props.effective.revealAll ||
@@ -79,26 +76,7 @@ function noticePlaySentence(index: number) {
   sentenceRefMap.get(index)?.play?.()
 }
 
-function playTtsWithGuide(text: string, onEnd?: () => void) {
-  if (!ttsVoiceHintShown) {
-    const hasVoice = settingStore.ttsVoiceMap?.some(v => v.key === getBrowserKey() && v.voice)
-    if (!hasVoice) {
-      ttsVoiceHintShown = true
-      const ins = Toast.warning(
-        '例句默认使用浏览器内置 TTS 发音，若无声请前往「设置 → 音效设置 → TTS 声色」选择可用声色',
-        {
-          duration: 10000,
-          action: {
-            text: '设置',
-            onClick: () => {
-              router.push('/setting?index=4')
-              ins.close()
-            },
-          },
-        }
-      )
-    }
-  }
+function playExampleAudio(text: string, onEnd?: () => void) {
   ttsPlayAudio(text, {
     onEnd,
     volume: settingStore.sentenceSoundVolume / 100,
@@ -112,7 +90,7 @@ function playSentence(index: number, options?: { highlight?: boolean }) {
   const wordKey = props.word.word
   const highlight = options?.highlight ?? false
   if (highlight) highlightedSentenceIndex = index
-  playTtsWithGuide(text, () => {
+  playExampleAudio(text, () => {
     if (props.word.word === wordKey && highlight && highlightedSentenceIndex === index) {
       highlightedSentenceIndex = -1
     }
@@ -193,7 +171,7 @@ defineExpose({ startPracticeSentence, playSentence })
             <div class="flex items-center gap-4" v-for="(item, index) in word.phrases" :key="index">
               <div class="flex gap-space items-center">
                 <ClickableEnglishText class="en" :text="item.c" :word="word.word" :dictation="effective.isWordMasked" />
-                <VolumeIcon :simple="false" title="发音" @click.stop="() => playTtsWithGuide(item.c)" />
+                <VolumeIcon :simple="false" title="发音" @click.stop="() => playExampleAudio(item.c)" />
               </div>
               <div class="anim" v-opacity="showTranslation">
                 {{ item.cn }}

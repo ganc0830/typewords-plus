@@ -7,6 +7,7 @@ import type { FSRSParameters } from 'ts-fsrs'
 
 export interface SettingState {
   soundType: string
+  speechVoice: string
 
   wordSound: boolean
   wordSoundVolume: number
@@ -82,6 +83,7 @@ export interface SettingState {
 
 export const getDefaultSettingState = (): SettingState => ({
   soundType: 'us',
+  speechVoice: '',
 
   wordSound: true,
   wordSoundVolume: 100,

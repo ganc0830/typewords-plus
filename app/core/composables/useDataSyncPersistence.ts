@@ -571,7 +571,7 @@ export function useDataSyncPersistence() {
 
   async function saveDictState(state: BaseState = store.$state, options?: SaveLocalAndSyncOptions) {
     const { data, canSyncRemote } = await prepareDictState(state)
-    await saveLocalAndSync(SyncDataType.dict, data, { ...options, canSyncRemote })
+    await saveLocalAndSync(SyncDataType.dict, data, { ...options, canSyncRemote: canSyncRemote && options?.canSyncRemote !== false })
   }
 
   async function getLocalCompactDataByType(type: SyncDataType) {

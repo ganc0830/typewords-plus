@@ -1,110 +1,65 @@
-<h1 align=center>
-  <img src="https://github.com/user-attachments/assets/9d626e0f-0601-4640-8981-ad66d8ac4853" alt="TypeWords" style="width: 500px;"/>
-</h1>
+# TypeWords Plus
 
-<p align="center">
-  <a href="/README.md">English</a> |
-  <a href="/docs/README.es.md">Español</a> |
-  <a href="/docs/README.de.md">Deutsch</a> |
-  <a href="/docs/README.fr.md">Français</a> |
-  <a href="/docs/README.pt.md">Português</a> |
-  <a href="/docs/README.ru.md">Русский</a> |
-  <a href="/docs/README.uk.md">Українська</a> |
-  <a href="/docs/README.ja.md">日本語</a> |
-  <a href="/docs/README.ko.md">한국인</a> |
-  <a href="/docs/README.th.md">ไทย</a> |
-  <a href="/docs/README.vi.md">Tiếng Việt</a> |
-  <a href="/docs/README.id.md">Bahasa Indonesia</a> |
-  <a href="/docs/README.zh-TW.md">繁體中文</a> |
-  <a href="/docs/README.zh-CN.md">简体中文</a> 
-</p>
+基于 [TypeWords](https://github.com/zyronon/TypeWords) 的 Windows 本地学习版。浏览器打开本机站点练习英文，可以导入自己的文件和选择离线朗读音色。
 
-<p align="center">
-  <b>Learn English, one keystroke at a time; smarter memorization, more efficient learning - an open-source word and article practice tool</b>
-</p>
+## 功能
 
-## Project Introduction
+- 书籍列表支持 PDF、EPUB、DOC、DOCX、XLS、XLSX、XLSM、ODS、CSV、TSV。PDF 需要包含可提取的文本，导入上限为 64 MiB。
+- 从文章练习底栏启动连续朗读，可暂停、继续，并在读完当前篇后进入下一篇。
+- **设置 → 音效设置 → 全局发音声色**可选择 Kokoro Heart（美音女声）、Emma（英音女声）、George（英音男声）或 Chatterbox Nano（模型内置音色），右侧扬声器可试听。
+- 文件解析和语音合成在本机完成。书籍及学习数据存入当前浏览器的 IndexedDB。仓库只包含源码和上游公开资源。
 
-<https://www.bilibili.com/video/BV1QwYv6eEAS>
+## 安装环境
 
-## Online Access
+- Windows x64、PowerShell、Git、Node.js 24（本机版本为 24.18.0）、pnpm 10、Python 3.12 x64。Node.js 自带 npm，Python 需包含 venv 和 pip。
+- Python 解析依赖为 `pypdf==6.10.0`、`python-calamine==0.9.1`，旧版 DOC 的 Node 依赖为 `word-extractor==1.0.4`。
+- Kokoro 使用 `kokoro-onnx==0.6.1` 和其 ONNX Runtime 依赖。Chatterbox 使用官方 Nano 源码版本 `5de7a54aa4e5e2baadb0182dde554908b48b85c2`，配套 PyTorch / torchaudio 2.6.0、Transformers 5.2.0 和 Perth 水印组件。固定 `setuptools==80.10.2` 提供 Perth 使用的 `pkg_resources`。
+- 两个模型默认走 CPU。Chatterbox 的模型及运行库占用数 GB 磁盘空间，CPU 合成时也需要数 GB 可用内存。依赖和模型下载完成后，本地朗读无需联网。
+- 如果 ONNX Runtime 或 PyTorch 在 Windows 上报运行库 DLL 缺失，安装 [Microsoft Visual C++ Redistributable x64](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist)。
 
-<https://typewords.cc>
+### 安装程序依赖
 
-<img width="1920" height="1440" alt="practice words" src="/public/imgs/words.png" />
-<img width="1920" height="1440" alt="practice articles" src="/public/imgs/articles.png" />
+在仓库根目录打开 PowerShell。需要把项目数据放到 D 盘时，请先将仓库克隆到 D 盘。
 
-## Features
+```powershell
+pnpm install --frozen-lockfile
+npm ci --prefix scripts/legacy-word
+py -3.12 -m venv .venv
+$python = Join-Path $PWD '.venv\Scripts\python.exe'
+& $python -m pip install -r scripts/requirements-local-book.txt
+& $python -m pip install --target voice-libs/kokoro 'kokoro-onnx==0.6.1'
+& $python -m pip install --target voice-libs/chatterbox 'chatterbox-tts @ git+https://github.com/resemble-ai/chatterbox.git@5de7a54aa4e5e2baadb0182dde554908b48b85c2' 'setuptools==80.10.2'
+```
 
-### Word Practice
+### 下载语音模型
 
-- Practice modes: Follow-along / Dictation / Self-test / Spelling from memory
-- Smart mode: Automatically calculates learning words based on memory curves, deepening memory through dictation
-- Free mode: No restrictions, plan your own learning
-- Provides phonetics, pronunciation (American/British), example sentences, phrases, synonyms, root words, etymology, error statistics, and more
+```powershell
+New-Item -ItemType Directory -Force voices/kokoro, voices/chatterbox-nano | Out-Null
+$kokoro = 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1'
+curl.exe --fail --location "$kokoro/kokoro-v1.0.fp16.onnx" --output 'voices/kokoro/kokoro-v1.0.fp16.onnx'
+curl.exe --fail --location "$kokoro/voices-v1.0.bin" --output 'voices/kokoro/voices-v1.0.bin'
+& $python -c "import sys; sys.path.insert(0, 'voice-libs/chatterbox'); from huggingface_hub import snapshot_download; snapshot_download(repo_id='ResembleAI/chatterbox-nano', revision='71ccd1d0081b430592cea481f4307e764e07bc64', local_dir='voices/chatterbox-nano', allow_patterns=['*.safetensors','*.pt','*.json','merges.txt'])"
+```
 
-### Article Memorization
+各模型的文件和使用许可见 [Kokoro ONNX 发布页](https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.1) 和 [Chatterbox Nano 模型页](https://huggingface.co/ResembleAI/chatterbox-nano)。
 
-- Built-in classic textbooks; you can also add or import articles with one-click translation and bilingual comparison
-- Follow-along + dictation dual modes, sentence-by-sentence input with automatic pronunciation for more efficient memorization
-- Supports listening while writing from memory to reinforce learning
+### 构建和启动
 
-### Favorites, Wrong Words, Mastered
+```powershell
+$env:ORIGIN = 'http://127.0.0.1:5567'
+$env:NUXT_TELEMETRY_DISABLED = '1'
+pnpm build
+node start.mjs
+```
 
-- Words typed incorrectly while learning are automatically added to your wrong word book for later review
-- Actively add words to mastered to automatically skip them in future sessions
-- Add words to favorites for consolidation and review
+打开 [书籍列表](http://127.0.0.1:5567/book-list) 导入文件，或直接打开 [音效设置](http://127.0.0.1:5567/setting?index=4)。按 `Ctrl+C` 停止服务。
 
-### Highly Customizable
+## 当前状态
 
-- Rich keyboard sound effects
-- Customizable shortcuts
-- Highly configurable settings
+Windows 本机已验证 10 种文件格式可以导入并打开练习。语音功能处于预览阶段。Kokoro 的三个音色已通过本地语音接口验证，浏览器刷新后的音色恢复和完整连续播放仍待确认。Chatterbox Nano 已在独立进程生成音频，正式站点在本机 CPU 负载较高时曾遇到合成超时。
 
-### Clean and Efficient
+## 致谢与许可
 
-- Clean design, modern UI, ad-free
-- Refreshing interface, simple operation
-- No forced subscription to any platform
+感谢 [zyronon](https://github.com/zyronon) 和 [TypeWords 的所有贡献者](https://github.com/zyronon/TypeWords/graphs/contributors) 开源原项目，提供了单词和文章练习、词库和界面基础。本项目基于上游提交 `1bcc2a2`，保留上游 Git 历史和 [GPL-3.0 许可证](LICENSE)。上游项目介绍见 [原版中文文档](docs/README.zh-CN.md)。
 
-### Vocabulary Library
-
-Built-in commonly used vocabulary including CET-4, CET-6, GMAT, GRE, IELTS, SAT, TOEFL, Graduate English, TEM-4, TEM-8, and more (official website only).
-Designed to meet most users' vocabulary learning needs. Community contributions of additional vocabulary are welcome.
-
-## Running the Project
-
-#### Note: This project can run standalone with data saved locally. Manual backup is required when switching devices; this does not affect normal usage.
-
-This project is built with `Nuxt` and requires a Node.js environment.
-
-1. Install NodeJS, refer to the [official documentation](https://nodejs.org/en/download)
-2. The project is large. It's recommended to use `git clone --depth 1 https://github.com/zyronon/TypeWords.git` to clone only the latest commit. GitHub's Download ZIP feature will not work properly.
-3. In the project root directory, open a terminal and run `pnpm install` to download dependencies.
-4. Run `pnpm run dev` to start the project. The default address is [`http://localhost:5567`](http://localhost:5567)
-5. Open [`http://localhost:5567`](http://localhost:5567) in your browser to access the project.
-6. Run `pnpm run generate` to build the project files.
-
-## Features and Suggestions
-
-The project is currently in early development, with new features being added continuously. If you have any suggestions or feature requests, feel free to open an `Issue`.
-If you like the design philosophy of this software, please submit a `PR`. Thank you for your support!
-
-## Contributing Guide
-
-[Contributing Guidelines](/docs/CONTRIBUTING.md)
-
-If you're interested in this project, we welcome your contributions and will provide as much help as possible.
-
-Before contributing, please communicate with the developers to avoid code conflicts.
-
-Thank you again for your contributions!
-
-
-## ❤️ Support TypeWords
-If TypeWords has been helpful to you, feel free to sponsor the project to support server operation and future development.  
-Of course, sponsorship is not required for use—sharing the project, submitting feedback, or contributing code are also highly valuable forms of support.
-
-<img width="300" height="390" alt="practice words" src="/public/imgs/zhifubao.png" />
-<img width="300" height="390" alt="practice words" src="/public/imgs/weixin.png" />
-
+感谢 [hexgrad 和 Kokoro 贡献者](https://huggingface.co/hexgrad/Kokoro-82M)、[thewh1teagle 和 kokoro-onnx 贡献者](https://github.com/thewh1teagle/kokoro-onnx)，以及 [Resemble AI 的 Chatterbox 团队](https://github.com/resemble-ai/chatterbox) 发布本地语音模型和推理代码。

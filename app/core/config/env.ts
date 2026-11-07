@@ -17,7 +17,7 @@ const map = {
   DEV: {
     API: 'http://localhost/',
     RESOURCE_URL: '',
-    LIBS_URL: '/libs/',
+    LIBS_URL: '/libs',
   },
 }
 
@@ -94,7 +94,7 @@ export const LIB_JS_URL = {
   JSZIP: `${ENV.LIBS_URL}/jszip.min.js`,
   XLSX: `${ENV.LIBS_URL}/xlsx.full.min.js`,
 }
-export const PronunciationApi = 'https://dict.youdao.com/dictvoice?audio='
+export const PronunciationApi = '/api/voice?audio='
 export const DefaultShortcutKeyMap = {
   [ShortcutKey.EditArticle]: 'Ctrl+E',
   [ShortcutKey.PlayWordPronunciation]: 'Ctrl+P',

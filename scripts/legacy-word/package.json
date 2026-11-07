@@ -1,0 +1,7 @@
+{
+  "name": "typewords-legacy-word",
+  "private": true,
+  "dependencies": {
+    "word-extractor": "1.0.4"
+  }
+}

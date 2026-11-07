@@ -7,6 +7,8 @@ import PracticeLayout from '@/components/PracticeLayout.vue'
 import SettingDialog from '@/components/setting/SettingDialog.vue'
 import { DICT_LIST } from '@/core/config/env.ts'
 import { genArticleSectionData, usePlayArticleTextAudio, usePlaySentenceAudio } from '@/core/hooks/article.ts'
+import { cancelWordPracticeAudio, localSpeechUrl, splitSpeechText } from '@/core/hooks/sound'
+import { selectedSpeechVoice } from '#shared/speech-voices'
 import { useArticleOptions } from '@/core/hooks/dict.ts'
 import { useOnKeyboardEventListener, useStartKeyboardEventListener } from '@/core/hooks/event.ts'
 import { useDisableEventListener } from '@/core/hooks/event'
@@ -32,7 +34,7 @@ import {
 import { getPracticeArticleCacheLocal } from '@/core/utils/cache.ts'
 import { usePracticeArticlePersistence } from '@/core/composables/usePracticePersistence'
 import { emitter, EventKey, useEvents } from '@/core/utils/eventBus'
-import { computed, onMounted, onUnmounted, provide, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, provide, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { DictType, PracticeArticleWordType, ShortcutKey } from '@/core/types/enum.ts'
 
@@ -59,6 +61,139 @@ let isFocus = true
 let isTyped = $ref(false)
 //用于解决 手动改文章时改了lastLearnIndex，同时又监听了store.sbook.lastLearnIndex，会冲突
 let lock = false
+let reading = $ref(false)
+let readingSession = $ref(false)
+let readingPosition = $ref<{ section: number; sentence: number } | null>(null)
+let readGeneration = 0
+let readAudio: HTMLAudioElement | undefined
+let preparedAudio: HTMLAudioElement | undefined
+let endReadAudio: ((played: boolean) => void) | undefined
+let resumeReading: (() => void) | undefined
+
+/** 取消当前读音、下一段预加载和正在等待的读音回调。 */
+function stopReading() {
+  readGeneration++
+  reading = false
+  readingSession = false
+  readingPosition = null
+  endReadAudio?.(false)
+  endReadAudio = undefined
+  resumeReading?.()
+  resumeReading = undefined
+  for (const player of [readAudio, preparedAudio]) {
+    if (!player) continue
+    player.onended = player.onerror = player.onplaying = null
+    player.pause()
+    player.removeAttribute('src')
+    player.load()
+  }
+  readAudio = preparedAudio = undefined
+}
+
+/** 读取当前句的文本，播放时提前加载下一段，始终使用文章音量与速度。 */
+function playReadChunk(text: string, upcoming?: string) {
+  const voice = selectedSpeechVoice(settingStore.speechVoice, settingStore.soundType)
+  const url = new URL(localSpeechUrl(text, voice), location.href).href
+  const player = preparedAudio?.src === url ? preparedAudio : new Audio(url)
+  if (preparedAudio && preparedAudio !== player) {
+    preparedAudio.removeAttribute('src')
+    preparedAudio.load()
+  }
+  readAudio = player
+  preparedAudio = undefined
+  player.volume = settingStore.articleSoundVolume / 100
+  player.playbackRate = settingStore.articleSoundSpeed
+  return new Promise<boolean>(resolve => {
+    endReadAudio = resolve
+    player.onended = () => resolve(true)
+    player.onerror = () => resolve(false)
+    player.onplaying = () => {
+      player.onplaying = null
+      if (upcoming) {
+        preparedAudio = new Audio(localSpeechUrl(upcoming, voice))
+        preparedAudio.preload = 'auto'
+      }
+    }
+    void player.play().catch(() => {
+      if (reading) resolve(false)
+    })
+  })
+}
+
+/** 从打字光标所在句开始朗读。跨篇使用现有切篇流程，不记作打字完成。 */
+async function readArticles(generation: number, firstSection: number, firstSentence: number) {
+  try {
+    while (generation === readGeneration) {
+      const chunks = articleData.article.sections.flatMap((section, i) =>
+        section.flatMap((sentence, j) =>
+          i > firstSection || (i === firstSection && j >= firstSentence)
+            ? splitSpeechText(sentence.text).map(text => ({ text, section: i, sentence: j }))
+            : [],
+        ),
+      )
+      for (let i = 0; i < chunks.length; i++) {
+        if (!reading && generation === readGeneration) await new Promise<void>(resolve => { resumeReading = resolve })
+        if (generation !== readGeneration) return
+        const { text, section, sentence } = chunks[i]
+        readingPosition = { section, sentence }
+        void nextTick(() => {
+          document.querySelector('#article-content .reading-sentence')?.scrollIntoView({ block: 'nearest' })
+        })
+        const nextArticleText = articleData.list[store.sbook.lastLearnIndex + 1]?.text?.trim().split('\n', 1)[0] ?? ''
+        const upcoming = chunks[i + 1]?.text ?? splitSpeechText(nextArticleText)[0]
+        const played = await playReadChunk(text, upcoming)
+        if (generation !== readGeneration) return
+        endReadAudio = undefined
+        readAudio = undefined
+        if (!played) {
+          Toast.warning('本地朗读暂不可用，请重试。')
+          return
+        }
+      }
+      const nextIndex = store.sbook.lastLearnIndex + 1
+      if (nextIndex >= articleData.list.length) return
+      await articlePersistence.clear()
+      if (generation !== readGeneration) return
+      lock = true
+      store.sbook.lastLearnIndex = nextIndex
+      getCurrentPractice()
+      await nextTick()
+      lock = false
+      firstSection = firstSentence = 0
+    }
+  } catch (error) {
+    if (generation === readGeneration) {
+      console.warn('连续朗读失败', (error as Error).name)
+      Toast.warning('本地朗读暂不可用，请重试。')
+    }
+  } finally {
+    if (generation === readGeneration) stopReading()
+  }
+}
+
+/** 底栏按钮切换朗读和暂停，恢复时保留当前音频位置。 */
+function toggleReading() {
+  if (!articleData.article.sections.length) return
+  if (reading) {
+    reading = false
+    readAudio?.pause()
+    return
+  }
+  reading = true
+  if (readingSession) {
+    resumeReading?.()
+    resumeReading = undefined
+    void readAudio?.play().catch(() => {
+      if (reading) endReadAudio?.(false)
+    })
+    return
+  }
+  cancelWordPracticeAudio()
+  audioRef?.pause()
+  readingSession = true
+  const position = typingArticleRef?.getIndex()
+  void readArticles(++readGeneration, position?.sectionIndex ?? 0, position?.sentenceIndex ?? 0)
+}
 
 function write() {
   // console.log('write')
@@ -69,11 +204,13 @@ function write() {
 //TODO 需要判断是否已忽略
 //todo 使用场景是？
 function repeat() {
+  stopReading()
   // console.log('repeat')
   getCurrentPractice()
 }
 
 function prev() {
+  stopReading()
   // console.log('next')
   if (store.sbook.lastLearnIndex === 0) {
     Toast.warning('已经在第一章了~')
@@ -86,7 +223,10 @@ function prev() {
 const toggleShowTranslate = () => (settingStore.translate = !settingStore.translate)
 const toggleDictation = () => (settingStore.dictation = !settingStore.dictation)
 const togglePanel = () => (settingStore.showPanel = !settingStore.showPanel)
-const skip = () => typingArticleRef?.nextSentence()
+const skip = () => {
+  stopReading()
+  typingArticleRef?.nextSentence()
+}
 const collect = () => toggleArticleCollect(articleData.article)
 const shortcutKeyEdit = () => edit()
 
@@ -96,6 +236,7 @@ function toggleConciseMode() {
 }
 
 function next() {
+  stopReading()
   articlePersistence.clear()
   if (store.sbook.lastLearnIndex >= articleData.list.length - 1) {
     store.sbook.complete = true
@@ -139,7 +280,7 @@ async function init() {
 
 const initAudio = () => {
   _nextTick(() => {
-    if (import.meta.server) return
+    if (import.meta.server || !audioRef) return
     audioRef.volume = settingStore.articleSoundVolume / 100
     audioRef.playbackRate = settingStore.articleSoundSpeed
   })
@@ -200,6 +341,7 @@ onMounted(() => {
 })
 
 async function unmount() {
+  stopReading()
   document.removeEventListener('visibilitychange', onvisibilitychange)
   console.log('onUnmounted')
   const cache = await getPracticeArticleCacheLocal()
@@ -328,6 +470,7 @@ function saveArticle(val: Article) {
 }
 
 function edit(val: Article = articleData.article) {
+  stopReading()
   editArticle = val
   showEditArticle = true
 }
@@ -350,6 +493,7 @@ function wrong(word: Word) {
 }
 
 function nextWord(word: ArticleWord) {
+  if (readingSession) stopReading()
   if (!store.allIgnoreWords.includes(word.word.toLowerCase()) && word.type === PracticeArticleWordType.Word) {
     statStore.inputWordNumber++
   }
@@ -357,6 +501,7 @@ function nextWord(word: ArticleWord) {
 
 async function changeArticle(val: ArticleItem) {
   if (lock) return
+  stopReading()
   lock = true
   await articlePersistence.clear()
   let rIndex = articleData.list.findIndex(v => v.id === val.item.id)
@@ -420,6 +565,8 @@ const { playArticleTextAudio } = usePlayArticleTextAudio()
 
 function play2(e) {
   _nextTick(() => {
+    if (readingSession && !e.handle) return
+    if (readingSession) stopReading()
     if (settingStore.articleSound || e.handle) {
       playSentenceAudio(e.sentence, audioRef)
     }
@@ -427,6 +574,7 @@ function play2(e) {
 }
 
 function playArticleHeadAudio(e) {
+  stopReading()
   _nextTick(() => {
     playArticleTextAudio(e, audioRef)
   })
@@ -454,6 +602,7 @@ provide('currentPractice', currentPractice)
         @replay="setArticle(articleData.article)"
         @complete="complete"
         :article="articleData.article"
+        :reading-position="readingPosition"
       />
     </template>
     <template v-slot:panel>
@@ -527,7 +676,9 @@ provide('currentPractice', currentPractice)
             ></ArticleAudio>
             <div class="flex flex-col items-center justify-center gap-1">
               <div class="flex gap-2 center">
-                <SettingDialog type="article" />
+                <div class="contents" @click.capture="stopReading">
+                  <SettingDialog type="article" />
+                </div>
 
                 <BaseIcon :title="`下一句(${settingStore.shortcutKeyMap[ShortcutKey.Next]})`" @click="skip">
                   <IconFluentArrowBounce20Regular class="transform-rotate-180" />
@@ -537,6 +688,20 @@ provide('currentPractice', currentPractice)
                   @click="play"
                 >
                   <IconFluentReplay20Regular />
+                </BaseIcon>
+                <BaseIcon
+                  :title="reading ? '暂停朗读' : readingSession ? '继续朗读' : '自动朗读'"
+                  :aria-label="reading ? '暂停朗读' : readingSession ? '继续朗读' : '自动朗读'"
+                  role="button"
+                  tabindex="0"
+                  :aria-pressed="reading"
+                  :active="reading"
+                  @click="toggleReading"
+                  @keydown.enter.stop.prevent="toggleReading"
+                  @keydown.space.stop.prevent="toggleReading"
+                >
+                  <IconFluentPause20Regular v-if="reading" />
+                  <IconFluentPlay20Regular v-else />
                 </BaseIcon>
                 <BaseIcon
                   @click="settingStore.dictation = !settingStore.dictation"

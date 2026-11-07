@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { BaseButton, BaseIcon, BasePage, DeleteIcon, PopConfirm, Progress, Toast } from '@/base'
 import Book from '@/components/Book.vue'
+import ImportLocalBook from '@/components/article/ImportLocalBook.vue'
 import { APP_NAME, DICT_LIST } from '@/core/config/env.ts'
 import { useBaseStore } from '@/core/stores/base.ts'
 import { useRuntimeStore } from '@/core/stores/runtime.ts'
@@ -307,6 +308,7 @@ const { data: recommendBookList, isFetching } = useFetch(resourceWrap(DICT_LIST.
           </div>
         </div>
       </div>
+      <ImportLocalBook class="mt-4" />
       <div class="flex gap-4 flex-wrap mt-4">
         <Book
           :is-add="false"

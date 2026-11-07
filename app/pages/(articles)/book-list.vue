@@ -11,9 +11,12 @@ import { getDefaultDict } from '@/core/types/func.ts'
 import { useFetch } from '@vueuse/core'
 import { DICT_LIST } from '@/core/config/env.ts'
 import { BaseInput } from '@/base'
+import { useBaseStore } from '@/core/stores/base'
+import ImportLocalBook from '@/components/article/ImportLocalBook.vue'
 
 const { nav } = useNav()
 const runtimeStore = useRuntimeStore()
+const store = useBaseStore()
 const router = useRouter()
 
 function selectDict(e) {
@@ -31,7 +34,8 @@ let searchKey = $ref('')
 const { data: bookList, isFetching } = useFetch<DictResource[]>(resourceWrap(DICT_LIST.ARTICLE.ALL)).json()
 
 const list = $computed(() => {
-  return bookList.value?.filter(item => !item.hidden)
+  const localBooks = store.article.bookList.filter(item => item.custom && String(item.id).startsWith('local-book-'))
+  return [...localBooks, ...(bookList.value ?? []).filter(item => !item.hidden)]
 })
 
 const searchList = computed<any[]>(() => {
@@ -39,7 +43,7 @@ const searchList = computed<any[]>(() => {
     let s = searchKey.toLowerCase()
     return list.filter(item => {
       return (
-        item.enName.toLowerCase().includes(s) ||
+        item.enName?.toLowerCase().includes(s) ||
         item.name.toLowerCase().includes(s) ||
         item.category.toLowerCase().includes(s) ||
         item.tags.join('').replace('所有', '').toLowerCase().includes(s) ||
@@ -74,6 +78,7 @@ const searchList = computed<any[]>(() => {
           </BaseIcon>
         </div>
       </div>
+      <ImportLocalBook class="mt-4" />
       <div class="mt-4" v-if="searchKey">
         <DictList
           v-if="searchList.length"

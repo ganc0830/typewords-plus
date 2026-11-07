@@ -3,6 +3,7 @@ import { useSettingStore } from '../stores/setting'
 import { ref } from 'vue'
 
 import { ENV, PronunciationApi, SoundFileOptions } from '../config/env'
+import { selectedSpeechVoice, speechVoices, type SpeechVoice } from '#shared/speech-voices'
 import { Toast } from '@/base'
 
 /**
@@ -171,9 +172,29 @@ export function cancelWordPracticeAudio() {
   if (wordAudio) {
     wordAudio.onended = null
     wordAudio.onerror = null
+    wordAudio.onplay = null
     wordAudio.pause()
     wordAudio.currentTime = 0
   }
+}
+
+/** 单词、例句和文章共用同源语音及全局口音，版本标记隔离旧版 SAPI 缓存。 */
+export function localSpeechUrl(text: string, voice: SpeechVoice) {
+  return `${PronunciationApi}${encodeURIComponent(text)}&voice=${voice}`
+}
+
+/** 长文本沿单词边界拆成语音服务能够处理的片段。 */
+export function splitSpeechText(text: string) {
+  const chunks: string[] = []
+  text = text.trim()
+  while (text.length > 450) {
+    const space = text.lastIndexOf(' ', 450)
+    const end = space >= 225 ? space : 450
+    chunks.push(text.slice(0, end))
+    text = text.slice(end).trimStart()
+  }
+  if (text) chunks.push(text)
+  return chunks
 }
 
 export function usePlayWordAudio() {
@@ -209,10 +230,7 @@ export function usePlayWordAudio() {
       }, 5000)
     }
     // console.log('playAudio-handle', handle, playbackRate)
-    let url = `${PronunciationApi}${word}&type=2`
-    if (settingStore.soundType === 'uk') {
-      url = `${PronunciationApi}${word}&type=1`
-    }
+    const url = localSpeechUrl(word, selectedSpeechVoice(settingStore.speechVoice, settingStore.soundType))
     let onended = () => {
       if (generation !== wordPlaybackGeneration) return
       onEnd?.()
@@ -222,12 +240,14 @@ export function usePlayWordAudio() {
     wordAudio.onerror = () => {
       if (generation !== wordPlaybackGeneration) return
       const ttsPlay = useTTsPlayAudio()
-      ttsPlay(word, { rate: playbackRate, onEnd: onended })
+      ttsPlay(word, { rate: playbackRate, onEnd: onended, browserOnly: true })
     }
     wordAudio.src = url
     wordAudio.volume = settingStore.wordSoundVolume / 100
     wordAudio.playbackRate = playbackRate
-    void wordAudio.play()
+    void wordAudio.play().catch(() => {
+      if (generation === wordPlaybackGeneration && !wordAudio.error) onended()
+    })
   }
 
   return playAudio
@@ -250,29 +270,62 @@ export interface TTsPlayOptions {
   pitch?: number
   lang?: string
   onEnd?: () => void
+  voice?: SpeechVoice
+  browserOnly?: boolean
 }
 
 export function useTTsPlayAudio() {
   const settingStore = useSettingStore()
 
   function play(text: string, options: TTsPlayOptions = {}) {
-    if (!text || typeof speechSynthesis === 'undefined') return
+    if (!text?.trim()) return
+    const voice = options.voice ?? selectedSpeechVoice(settingStore.speechVoice, settingStore.soundType)
+    const audio = getCachedWordAudio()
+    if (audio && !options.browserOnly && (!options.lang || options.lang.startsWith('en'))) {
+      cancelWordPracticeAudio()
+      const generation = wordPlaybackGeneration
+      const chunks = splitSpeechText(text)
+      let index = 0
+      let finished = false
+      const finish = () => {
+        if (finished || generation !== wordPlaybackGeneration) return
+        finished = true
+        audio.onended = audio.onerror = null
+        options.onEnd?.()
+      }
+      const next = () => {
+        if (generation !== wordPlaybackGeneration) return
+        const chunk = chunks[index++]
+        if (!chunk) return finish()
+        audio.src = localSpeechUrl(chunk, voice)
+        void audio.play().catch(finish)
+      }
+      audio.playbackRate = options.rate ?? settingStore.wordSoundSpeed
+      audio.volume = options.volume ?? settingStore.wordSoundVolume / 100
+      audio.onended = next
+      audio.onerror = finish
+      next()
+      return
+    }
+    if (typeof speechSynthesis === 'undefined') return options.onEnd?.()
     const generation = ++ttsPlaybackGeneration
     speechSynthesis.cancel() // 防止 Chrome 队列卡死
     let msg = new SpeechSynthesisUtterance(text)
     msg.rate = options.rate ?? settingStore.wordSoundSpeed
     msg.volume = options.volume ?? settingStore.wordSoundVolume / 100
     msg.pitch = options.pitch ?? 1
-    msg.lang = options.lang ?? 'en-US'
+    msg.lang = options.lang ?? (speechVoices[voice].accent === 'uk' ? 'en-GB' : 'en-US')
     msg.onend = () => options.onEnd?.()
     msg.onerror = () => options.onEnd?.()
     getVoicesAsync().then((voices: any[]) => {
       if (generation !== ttsPlaybackGeneration) return
+      // 离线版仅选用设备本地语音。
+      voices = voices.filter(v => v.localService)
       // 优先使用用户在当前浏览器配置的声色
       const browserKey = getBrowserKey()
       const savedVoiceName = settingStore?.ttsVoiceMap?.find(v => v.key === browserKey)?.voice
       if (savedVoiceName) {
-        const savedVoice = voices.find(v => v.name === savedVoiceName)
+        const savedVoice = voices.find(v => v.name === savedVoiceName && v.lang === msg.lang)
         if (savedVoice) {
           msg.voice = savedVoice
           speechSynthesis.speak(msg)
@@ -280,11 +333,12 @@ export function useTTsPlayAudio() {
         }
       }
       // 回退：优先找 Emma / US，否则取第一个英文声色
-      let voiceList = voices.filter(v => v.lang === 'en-US')
+      let voiceList = voices.filter(v => v.lang === msg.lang)
       if (voiceList && voiceList.length) {
         msg.voice = voiceList.find(v => v.name.includes('US') || v.name.includes('Emma')) ?? voiceList[0]
       }
-      speechSynthesis.speak(msg)
+      if (msg.voice) speechSynthesis.speak(msg)
+      else options.onEnd?.()
     })
   }
 

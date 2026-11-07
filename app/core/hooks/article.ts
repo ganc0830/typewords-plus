@@ -1,7 +1,7 @@
 import type { Article, Sentence } from '../types'
 import { getDefaultArticleWord, getDefaultDict, PracticeArticleWordType } from '../types'
 import { _nextTick, cloneDeep, ensureCustomDictCopy } from '../utils'
-import { usePlayWordAudio, useTTsPlayAudio } from './sound'
+import { useTTsPlayAudio } from './sound'
 import { getSentenceAllText, getSentenceAllTranslateText } from './translate'
 import { useBaseStore } from '../stores/base'
 import { useRuntimeStore } from '../stores/runtime'
@@ -342,7 +342,8 @@ export function splitCNArticle2(text: string): string {
 }
 
 export function usePlaySentenceAudio() {
-  const playWordAudio = usePlayWordAudio()
+  const speak = useTTsPlayAudio()
+  const settingStore = useSettingStore()
   let timer = 0
   let onEndCb = null
 
@@ -377,7 +378,11 @@ export function usePlaySentenceAudio() {
         ref.onended = onEndCb
       }
     } else {
-      playWordAudio(sentence.text, false, onEnd)
+      speak(sentence.text, {
+        rate: settingStore.articleSoundSpeed,
+        volume: settingStore.articleSoundVolume / 100,
+        onEnd,
+      })
     }
   }
 

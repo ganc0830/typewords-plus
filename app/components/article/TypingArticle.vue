@@ -32,6 +32,7 @@ interface IProps {
   sentenceIndex?: number
   wordIndex?: number
   stringIndex?: number
+  readingPosition?: { section: number; sentence: number } | null
 }
 
 const props = withDefaults(defineProps<IProps>(), {
@@ -797,7 +798,11 @@ const currentPractice = inject('currentPractice', [])
     >
       <article>
         <div class="section" v-for="(section, indexI) in props.article.sections">
-          <span class="sentence" v-for="(sentence, indexJ) in section">
+          <span
+            class="sentence"
+            :class="{ 'reading-sentence': readingPosition?.section === indexI && readingPosition?.sentence === indexJ }"
+            v-for="(sentence, indexJ) in section"
+          >
             <span
               v-for="(word, indexW) in sentence.words"
               @contextmenu="e => onContextMenu(e, sentence, indexI, indexJ, indexW)"
@@ -934,6 +939,10 @@ $translate-lh: 3.2;
 $article-lh: 2.4;
 
 .typing-article {
+  .reading-sentence {
+    background: var(--color-fourth);
+    border-radius: 0.25rem;
+  }
   color: var(--color-article);
   width: var(--article-width);
   font-size: 1.6rem;

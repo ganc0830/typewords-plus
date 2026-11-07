@@ -1,8 +1,6 @@
 import { ref, unref, type ComputedRef, type Ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { Toast } from '@/base'
 import type { Word } from '../types'
-import { getBrowserKey, cancelWordPracticeAudio, usePlayWordAudio, useTTsPlayAudio } from '../hooks/sound'
+import { cancelWordPracticeAudio, usePlayWordAudio, useTTsPlayAudio } from '../hooks/sound'
 import { useSettingStore } from '../stores/setting'
 import { WordPlayTrigger } from '../types/enum'
 
@@ -25,12 +23,10 @@ export interface WordPracticeAudioOptions {
 
 export function useWordPracticeAudio({ word, volumeIconRef, canSeeSentences }: WordPracticeAudioOptions) {
   const settingStore = useSettingStore()
-  const router = useRouter()
   const playWordAudio = usePlayWordAudio()
   const ttsPlayAudio = useTTsPlayAudio()
 
   const highlightedSentenceIndex = ref(-1)
-  let ttsVoiceHintShown = false
 
   function shouldChainFirstSentence(trigger: WordPlayTrigger) {
     return (
@@ -41,27 +37,7 @@ export function useWordPracticeAudio({ word, volumeIconRef, canSeeSentences }: W
     )
   }
 
-  function playTtsWithGuide(text: string, onEnd?: () => void) {
-    if (!ttsVoiceHintShown) {
-      const browserKey = getBrowserKey()
-      const hasVoice = settingStore.ttsVoiceMap?.some(v => v.key === browserKey && v.voice)
-      if (!hasVoice) {
-        ttsVoiceHintShown = true
-        const ins = Toast.warning(
-          '例句默认使用浏览器内置 TTS 发音，若无声请前往「设置 → 音效设置 → TTS 声色」选择可用声色',
-          {
-            duration: 15000000,
-            action: {
-              text: '设置',
-              onClick: () => {
-                router.push('/setting?index=4')
-                ins.close()
-              },
-            },
-          }
-        )
-      }
-    }
+  function playExampleAudio(text: string, onEnd?: () => void) {
     ttsPlayAudio(text, {
       onEnd,
       volume: settingStore.sentenceSoundVolume / 100,
@@ -76,7 +52,7 @@ export function useWordPracticeAudio({ word, volumeIconRef, canSeeSentences }: W
     const highlight = options?.highlight ?? false
     if (highlight) highlightedSentenceIndex.value = index
 
-    playTtsWithGuide(text, () => {
+    playExampleAudio(text, () => {
       if (highlight && highlightedSentenceIndex.value === index) {
         highlightedSentenceIndex.value = -1
       }
@@ -116,7 +92,6 @@ export function useWordPracticeAudio({ word, volumeIconRef, canSeeSentences }: W
     highlightedSentenceIndex,
     playWord,
     playSentence,
-    playTtsWithGuide,
     WordPlayTrigger,
   }
 }

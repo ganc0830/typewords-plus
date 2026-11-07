@@ -61,15 +61,13 @@ export default defineNuxtConfig({
       link: [{ rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }],
     },
   },
-  // ssr: false,
+  ssr: false,
   routeRules: {
     '/words': { ssr: false },
     '/articles': { ssr: false },
     '/setting': { ssr: false },
-    '/book/nce1': { prerender: true },
-    '/book/nce2': { prerender: true },
-    '/book/nce3': { prerender: true },
-    '/book/nce4': { prerender: true },
+    // 本机独立部署，词库、录音及服务调用仅允许同源。
+    '/**': { headers: { 'Content-Security-Policy': "connect-src 'self'; media-src 'self' data: blob:; img-src 'self' data: blob:; font-src 'self' data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'none'" } },
   },
   vite: {
     plugins: [
