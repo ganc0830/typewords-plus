@@ -51,6 +51,7 @@ let articleData = $ref({
 })
 let showEditArticle = $ref(false)
 let typingArticleRef = $ref<any>()
+let footerRef = $ref<HTMLElement>()
 let showConflictNotice = $ref(false)
 let loading = $ref<boolean>(false)
 let allWrongWords = new Set()
@@ -120,6 +121,32 @@ function playReadChunk(text: string, upcoming?: string) {
   })
 }
 
+/** 句首所在行离开正文可视区时翻屏，把接下来要读的句子放在新屏上方。 */
+function turnReadingPage() {
+  const sentence = document.querySelector('#article-content .reading-sentence')
+  const line = sentence?.querySelector('.word')?.getBoundingClientRect()
+  if (!line) return
+
+  // 窄屏布局由正文外层滚动，桌面通常由文档滚动。
+  const main = sentence?.closest('.main-content')
+  const inner = main && main.scrollHeight > main.clientHeight ? main : null
+  const scroller = inner ?? document.scrollingElement
+  if (!scroller) return
+  const bounds = inner?.getBoundingClientRect()
+  const viewport = window.visualViewport
+  const viewportTop = viewport?.offsetTop ?? 0
+  const viewportBottom = viewportTop + (viewport?.height ?? window.innerHeight)
+  const navBottom = document.querySelector('.mobile-top-nav')?.getBoundingClientRect().bottom ?? 0
+  const header = sentence?.closest('.typing-article')?.querySelector('header')
+  const headerBottom = header && getComputedStyle(header).position === 'fixed' ? header.getBoundingClientRect().bottom : 0
+  const top = Math.max(viewportTop, bounds?.top ?? 0, navBottom, headerBottom)
+  const bottom = Math.min(viewportBottom, bounds?.bottom ?? viewportBottom,
+    footerRef?.getBoundingClientRect().top ?? viewportBottom)
+  // 底栏遮挡的行不算可见。留 1px 容差，避免子像素换行引起不必要的切屏。
+  if (bottom <= top || (line.top >= top - 1 && line.bottom <= bottom + 1)) return
+  scroller.scrollTo({ top: scroller.scrollTop + line.top - top - 12, behavior: 'instant' })
+}
+
 /** 从打字光标所在句开始朗读。跨篇使用现有切篇流程，不记作打字完成。 */
 async function readArticles(generation: number, firstSection: number, firstSentence: number) {
   try {
@@ -135,10 +162,13 @@ async function readArticles(generation: number, firstSection: number, firstSente
         if (!reading && generation === readGeneration) await new Promise<void>(resolve => { resumeReading = resolve })
         if (generation !== readGeneration) return
         const { text, section, sentence } = chunks[i]
-        readingPosition = { section, sentence }
-        void nextTick(() => {
-          document.querySelector('#article-content .reading-sentence')?.scrollIntoView({ block: 'nearest' })
-        })
+        const previous = chunks[i - 1]
+        if (!previous || previous.section !== section || previous.sentence !== sentence) {
+          readingPosition = { section, sentence }
+          await nextTick()
+          if (generation !== readGeneration) return
+          turnReadingPage()
+        }
         const nextArticleText = articleData.list[store.sbook.lastLearnIndex + 1]?.text?.trim().split('\n', 1)[0] ?? ''
         const upcoming = chunks[i + 1]?.text ?? splitSpeechText(nextArticleText)[0]
         const played = await playReadChunk(text, upcoming)
@@ -624,7 +654,7 @@ provide('currentPractice', currentPractice)
       </Panel>
     </template>
     <template v-slot:footer>
-      <div class="footer pb-3">
+      <div ref="footerRef" class="footer pb-3">
         <div class="center h-10">
           <Tooltip
             :title="`${settingStore.showToolbar ? $t('collapse') : $t('expand')}(${settingStore.shortcutKeyMap[ShortcutKey.ToggleToolbar]})`"

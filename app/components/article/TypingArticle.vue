@@ -208,7 +208,7 @@ function checkCursorPosition(a = sectionIndex, b = sentenceIndex, c = wordIndex)
         const endRect = end.getBoundingClientRect()
         // 判断元素是否在视口内
         const isInViewport = endRect.top >= 0 && endRect.top <= window.innerHeight
-        if (isInViewport) {
+        if (!props.readingPosition && isInViewport) {
           // 如果在视口内且位置大于屏幕的0.7高度，就滚动屏幕的1/3
           if (endRect.y > window.innerHeight * 0.7) {
             window.scrollTo({
@@ -216,7 +216,7 @@ function checkCursorPosition(a = sectionIndex, b = sentenceIndex, c = wordIndex)
               behavior: 'smooth',
             })
           }
-        } else {
+        } else if (!props.readingPosition) {
           // 如果不在视口内，滚动到屏幕中间
           window.scrollTo({
             top: document.documentElement.scrollTop + endRect.top - window.innerHeight / 2,
@@ -940,13 +940,20 @@ $article-lh: 2.4;
 
 .typing-article {
   .reading-sentence {
-    background: var(--color-fourth);
+    background: #5ee86f;
+    color: #102615;
     border-radius: 0.25rem;
+    box-decoration-break: clone;
+
+    .word {
+      color: inherit;
+    }
   }
   color: var(--color-article);
   width: var(--article-width);
   font-size: 1.6rem;
-  margin-bottom: 20rem;
+  // 内边距计入窄屏正文容器的滚动范围，末句也能移到固定底栏上方。
+  padding-bottom: 20rem;
 
   .mobile-input {
     position: absolute;
@@ -1004,10 +1011,6 @@ $article-lh: 2.4;
 
     .section {
       margin-bottom: 1.5rem;
-
-      .sentence {
-        transition: all 0.3s;
-      }
 
       .word {
         display: inline-block;
