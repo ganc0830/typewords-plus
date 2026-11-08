@@ -96,7 +96,8 @@ public class MainActivity extends Activity {
         URL url = new URL(settings.getString("server", "") + path);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setConnectTimeout(5000);
-        connection.setReadTimeout(25000);
+        // 电脑首次启动语音模型可能需要较长时间，同步和查词仍使用原有超时。
+        connection.setReadTimeout(path.startsWith("/api/voice?") ? 160000 : 25000);
         connection.setInstanceFollowRedirects(false);
         connection.setRequestProperty("X-TypeWords-Pairing", settings.getString("token", ""));
         return connection;

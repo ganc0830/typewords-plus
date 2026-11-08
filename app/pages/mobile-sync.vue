@@ -31,7 +31,7 @@ async function downloadVoices() {
     for (const text of texts) {
       if (stopAudio.value) break
       for (const part of splitSpeechText(text)) {
-        const response = await fetch(localSpeechUrl(part, voice), { signal: AbortSignal.timeout(60000) })
+        const response = await fetch(localSpeechUrl(part, voice), { signal: AbortSignal.timeout(165000) })
         if (!response.ok || (await response.blob()).size < 44) { voiceProgress.value = '语音下载失败，已下载的声音已保存，可以稍后重试。'; return }
       }
       voiceProgress.value = `已下载 ${++completed}/${texts.size} 条语音`
