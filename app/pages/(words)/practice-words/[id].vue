@@ -265,7 +265,7 @@ async function loadDict() {
         router.push('/words')
         return Toast.warning('没有单词可学习！')
       }
-      store.changeDict(dict)
+      await store.changeDict(dict)
       await initData(null, true)
       loading = false
     } else {

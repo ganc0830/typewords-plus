@@ -31,7 +31,8 @@ import { type BaseState, getDefaultBaseState, getDefaultSettingState, useBaseSto
 import type { BackupData, SaveData, Snapshot } from '../types/types.ts'
 import { SyncDataType, CompareResult, DictType } from '../types/enum'
 import { Supabase } from '../utils/supabase'
-import { del, get, set } from 'idb-keyval'
+import { del, delMany, get, keys, set, setMany } from 'idb-keyval'
+import { WORD_BOOK_PROGRESS_PREFIX, wordBookProgressEntries } from '../utils/word-book-progress'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Toast } from '@/base'
 
@@ -114,14 +115,14 @@ async function persistLocalState(type: SyncDataType, val: unknown, updated_at?: 
     await setPracticeArticleCacheLocal(val as PracticeArticleCache, updated_at)
     return
   }
-  await set(
-    getPersistKey(type),
-    JSON.stringify({
-      val,
-      version: getDataVersion(type),
-      updated_at,
-    })
-  )
+  const value = JSON.stringify({ val, version: getDataVersion(type), updated_at })
+  if (type === SyncDataType.dict) {
+    const books = (val as BaseState)?.word?.bookList ?? []
+    // 进度副本和主记录在同一事务内提交，避免刷新时只写入其中之一。
+    await setMany([[getPersistKey(type), value], ...wordBookProgressEntries(books, updated_at ?? new Date().toISOString())])
+  } else {
+    await set(getPersistKey(type), value)
+  }
 }
 
 function applyDictData(store: ReturnType<typeof useBaseStore>, data: unknown) {
@@ -582,6 +583,7 @@ export function useDataSyncPersistence() {
   }
 
   async function clear() {
+    await delMany((await keys()).filter(key => typeof key === 'string' && key.startsWith(WORD_BOOK_PROGRESS_PREFIX)))
     let d = getDefaultBaseState()
     d.load = true
     let d1 = getDefaultSettingState()

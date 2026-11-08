@@ -81,7 +81,7 @@ export function usePracticeSentenceInit() {
     }
 
     if (dict?.id) {
-      store.changeDict(dict)
+      await store.changeDict(dict)
     }
 
     return dict

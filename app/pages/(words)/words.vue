@@ -493,7 +493,7 @@ function check(cb: Function) {
 
 async function savePracticeSetting() {
   await resetCacheData()
-  await store.changeDict(runtimeStore.editDict)
+  await store.changeDict(runtimeStore.editDict, true)
   refreshStudyTask()
   Toast.success('修改成功')
 }
@@ -529,7 +529,7 @@ async function saveLastPracticeIndex(e) {
   runtimeStore.editDict.lastLearnIndex = e
   showChangeLastPracticeIndexDialog = false
   await resetCacheData()
-  await store.changeDict(runtimeStore.editDict)
+  await store.changeDict(runtimeStore.editDict, true)
   refreshStudyTask()
   Toast.success('修改成功')
 }

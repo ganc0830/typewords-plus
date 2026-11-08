@@ -2,7 +2,8 @@ import { defineStore } from 'pinia'
 import { type Dict, getDefaultDict, type SaveData, type Word } from '../types'
 import { _getStudyProgress, checkAndUpgradeSaveDict, isSameDictResource, parseJsonStr } from '../utils'
 import { shallowReactive } from 'vue'
-import { get } from 'idb-keyval'
+import { get, setMany } from 'idb-keyval'
+import { readWordBookProgress, wordBookProgress, wordBookProgressEntries } from '../utils/word-book-progress'
 import { DictId, IS_DEV, SAVE_DICT_KEY } from '../config/env'
 import type { Card } from 'ts-fsrs'
 import { useSettingStore } from './setting.ts'
@@ -193,6 +194,12 @@ export const useBaseStore = defineStore('base', {
             let result = await parseJsonStr(jsonStr, checkAndUpgradeSaveDict)
             // console.log('data', data)
             this.setState(result.val)
+            // 首次升级时也给现有词书建立副本，主数据可读时仍可继续学习。
+            try {
+              await setMany(wordBookProgressEntries(this.word.bookList, result.updated_at ?? new Date().toISOString()))
+            } catch (error) {
+              console.warn('词书进度副本写入失败', error)
+            }
             resolve(result)
           }
           resolve(null)
@@ -202,37 +209,48 @@ export const useBaseStore = defineStore('base', {
         }
       })
     },
-    //改变词典
-    async changeDict(val: Dict) {
+    /** 优先使用列表中的进度，重新添加同一本词书时再读取本机副本。 */
+    async getSavedWordBookProgress(val: Dict) {
+      const saved = this.word.bookList.find(book => isSameDictResource(book, val))
+      if (saved) return wordBookProgress(saved)
+      return await readWordBookProgress(val)
+    },
+    /** 切换词书默认沿用进度。applySettings 仅用于用户确认过的起点及每日目标。 */
+    async changeDict(val: Dict, applySettings = false) {
+      const rIndex = this.word.bookList.findIndex(book => isSameDictResource(book, val))
+      const saved = this.word.bookList[rIndex]
+      const progress = saved ? wordBookProgress(saved) : await readWordBookProgress(val)
+      const words = val.words?.length ? val.words : saved?.words ?? []
+      const length = words.length || val.length
+      const requestedIndex = applySettings ? val.lastLearnIndex : progress?.lastLearnIndex ?? val.lastLearnIndex
+      const requestedDaily = applySettings ? val.perDayStudyNumber : progress?.perDayStudyNumber ?? val.perDayStudyNumber
+      const lastLearnIndex = Math.max(0, Math.min(Math.trunc(
+        Number.isFinite(requestedIndex) ? requestedIndex : progress?.lastLearnIndex ?? 0
+      ), length))
+      const perDayStudyNumber = Math.min(Math.max(1, Math.trunc(
+        Number.isFinite(requestedDaily) ? requestedDaily : progress?.perDayStudyNumber ?? 20
+      )), length)
+      const samePosition = lastLearnIndex === progress?.lastLearnIndex
+      const complete = length > 0 && (lastLearnIndex >= length ||
+        ((!applySettings || samePosition) && (progress?.complete ?? val.complete)))
+
       //把其他的词典的单词数据都删掉，全保存在内存里太卡了
       this.word.bookList.slice(3).map(v => {
         if (!v.custom) {
           v.words = shallowReactive([])
         }
       })
-      if (val.words?.length) {
-        val.length = val.words.length
-      }
-      let rIndex = this.word.bookList.findIndex((v: Dict) => isSameDictResource(v, val))
-      if (val.perDayStudyNumber > val.length) {
-        val.perDayStudyNumber = val.length
-      }
-      if (val.lastLearnIndex > val.length) {
-        val.lastLearnIndex = val.length
-        val.complete = true
-      }
-      if (rIndex > -1) {
+      if (saved) {
         this.word.studyIndex = rIndex
-        this.word.bookList[this.word.studyIndex].words = shallowReactive(val.words)
-        this.word.bookList[this.word.studyIndex].id = val.id
-        this.word.bookList[this.word.studyIndex].enName = val.enName
-        this.word.bookList[this.word.studyIndex].length = val.length
-        this.word.bookList[this.word.studyIndex].perDayStudyNumber = val.perDayStudyNumber
-        this.word.bookList[this.word.studyIndex].lastLearnIndex = val.lastLearnIndex
-        this.word.bookList[this.word.studyIndex].userDictId = val.userDictId
-        this.word.bookList[this.word.studyIndex].complete = val.complete
+        Object.assign(saved, {
+          words: shallowReactive(words), id: val.id, enName: val.enName,
+          length, perDayStudyNumber, lastLearnIndex, userDictId: val.userDictId, complete,
+        })
       } else {
-        this.word.bookList.push(getDefaultDict(val))
+        this.word.bookList.push(getDefaultDict({
+          ...val, words, length, lastLearnIndex, perDayStudyNumber, complete,
+          statistics: progress?.statistics ?? val.statistics,
+        }))
         this.word.studyIndex = this.word.bookList.length - 1
       }
     },

@@ -300,6 +300,9 @@ onMounted(async () => {
     if (!runtimeStore.editDict.id) {
       return router.push('/words')
     } else {
+      // 目录只有默认值，设置对话框打开前应显示这本书已保存的进度。
+      const progress = await base.getSavedWordBookProgress(runtimeStore.editDict)
+      if (progress) Object.assign(runtimeStore.editDict, progress)
       if (!runtimeStore.editDict.words.length && !runtimeStore.editDict.custom && !runtimeStore.editDict.system) {
         loading = true
         let dictList = await fetch(resourceWrap(DICT_LIST.WORD.ALL)).then(r => r.json())
@@ -364,7 +367,7 @@ async function startPractice(query = {}) {
     flushStatToStore((cache as any)?.statStoreData)
     await wordPersistence.clear()
   }
-  await base.changeDict(runtimeStore.editDict)
+  await base.changeDict(runtimeStore.editDict, true)
   window.umami?.track('startStudyWord', {
     name: store.sdict.name,
     index: store.sdict.lastLearnIndex,
