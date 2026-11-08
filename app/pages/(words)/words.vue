@@ -450,6 +450,69 @@ async function goDictDetail(val: DictResource) {
 
 let isManageDict = $ref(false)
 let selectIds = $ref([])
+let draggedBookId = $ref<DictResource['id'] | null>(null)
+let dropBookId = $ref<DictResource['id'] | null>(null)
+let savingBookOrder = $ref(false)
+
+/** 拖动只在普通词书之间生效，内置的三个词单保留原位。 */
+function startBookDrag(event: DragEvent, id: DictResource['id'], index: number) {
+  if (index < 3 || isManageDict || savingBookOrder || !event.dataTransfer) {
+    event.preventDefault()
+    return
+  }
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/plain', String(id))
+  draggedBookId = id
+}
+
+/** 只接受本站已开始的词书拖动，并高亮可放置的目标。 */
+function dragOverBook(event: DragEvent, id: DictResource['id'], index: number) {
+  if (index < 3 || draggedBookId === null || draggedBookId === id || isManageDict || savingBookOrder) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  dropBookId = id
+}
+
+/** 结束拖动并清除目标提示。 */
+function clearBookDrag() {
+  draggedBookId = dropBookId = null
+}
+
+/** 按落点重排并保存，使用原词书身份重新计算正在学习的下标。 */
+async function dropBook(event: DragEvent, id: DictResource['id']) {
+  if (draggedBookId === null || isManageDict || savingBookOrder) return
+  event.preventDefault()
+  const previous = store.word.bookList
+  const studyIndex = store.word.studyIndex
+  const activeBookId = previous[studyIndex]?.id
+  const from = previous.findIndex(book => book.id === draggedBookId)
+  const to = previous.findIndex(book => book.id === id)
+  clearBookDrag()
+  if (from < 3 || to < 3 || from === to) return
+  const books = [...previous]
+  const [moved] = books.splice(from, 1)
+  books.splice(to, 0, moved)
+  savingBookOrder = true
+  store.$patch(state => {
+    state.word.bookList = books
+    state.word.studyIndex = books.findIndex(book => book.id === activeBookId)
+  })
+  const applied = store.word.bookList
+  try {
+    await dataSync.saveDictState(store.$state, { canSyncRemote: false })
+    Toast.success('词书顺序已保存')
+  } catch {
+    if (store.word.bookList === applied) {
+      store.$patch(state => {
+        state.word.bookList = previous
+        state.word.studyIndex = studyIndex
+      })
+    }
+    Toast.warning('词书顺序保存失败，请重试')
+  } finally {
+    savingBookOrder = false
+  }
+}
 
 async function handleBatchDel() {
   selectIds.forEach(id => {
@@ -825,17 +888,28 @@ onUnmounted(() => {
           <NuxtLink class="color-link" to="/import">导入词书</NuxtLink>
         </div>
       </div>
+      <p v-if="store.word.bookList.length > 4 && !isManageDict" class="mt-2 text-sm">拖动书卡可调整顺序</p>
       <div class="flex gap-4 flex-wrap mt-4">
-        <Book
-          :is-add="false"
-          quantifier="词"
-          :item="item"
-          :checked="selectIds.includes(item.id)"
-          @check="() => toggleSelect(item)"
-          :show-checkbox="isManageDict && j >= 3"
+        <div
           v-for="(item, j) in store.word.bookList"
-          @click="goDictDetail(item)"
-        />
+          :key="item.id"
+          :draggable="j >= 3 && !isManageDict && !savingBookOrder"
+          :class="{ 'opacity-50': draggedBookId === item.id, 'ring-2 ring-blue-500 rounded': dropBookId === item.id }"
+          @dragstart="startBookDrag($event, item.id, j)"
+          @dragover="dragOverBook($event, item.id, j)"
+          @drop="dropBook($event, item.id)"
+          @dragend="clearBookDrag"
+        >
+          <Book
+            :is-add="false"
+            quantifier="词"
+            :item="item"
+            :checked="selectIds.includes(item.id)"
+            @check="() => toggleSelect(item)"
+            :show-checkbox="isManageDict && j >= 3"
+            @click="goDictDetail(item)"
+          />
+        </div>
         <Book :is-add="true" @click="router.push('/dict-list')" />
       </div>
     </div>

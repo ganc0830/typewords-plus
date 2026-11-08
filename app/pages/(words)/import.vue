@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef, triggerRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { BackIcon, BaseButton, BaseInput, BasePage } from '@/base'
+import { BackIcon, BaseButton, BaseInput, BasePage, Textarea } from '@/base'
 import { useDataSyncPersistence } from '@/core/composables/useDataSyncPersistence'
 import { useBaseStore } from '@/core/stores/base'
 import { getDefaultDict, getDefaultWord } from '@/core/types/func'
 import { withAppBaseURL } from '@/core/utils/base-url'
+import { fillWordDetails, lookupWordDetails } from '@/core/utils/word-details'
+import type { Word } from '@/core/types/types'
 import { studyFileTypes, wordFileTypes } from '#shared/study-file'
 
 type WordFile = {
   id: string
   format: string
   skipped: number
-  words: Array<{ word: string; meanings: string[] }>
+  words: Array<{ word: string; meanings: string[]; details?: Omit<Word, 'id' | 'word' | 'custom'> }>
 }
 
 const route = useRoute()
@@ -25,11 +27,74 @@ const name = ref('')
 const message = ref('')
 const failed = ref(false)
 const busy = ref(false)
+const pastedWords = ref('')
+const lookup = shallowRef<AbortController>()
+onBeforeUnmount(() => lookup.value?.abort())
 const accepted = wordFileTypes.map(extension => '.' + extension).join(',')
 const targetId = computed(() => typeof route.query.targetId === 'string' ? route.query.targetId : '')
 const target = computed(() => store.word.bookList.find(book =>
   String(book.id) === targetId.value && (book.custom || book.system),
 ))
+
+/** 将每行一个单词或词组的纯文本整理成与文件导入相同的预览。 */
+function previewText() {
+  const lines = pastedWords.value.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+  if (lines.length > 50_000) {
+    failed.value = true
+    message.value = '最多预览 50,000 行，请分批输入。'
+    return
+  }
+  const unique = new Map<string, string>()
+  let skipped = 0
+  for (const line of lines) {
+    if (line.length > 100) skipped++
+    else if (!unique.has(line.toLowerCase())) unique.set(line.toLowerCase(), line)
+  }
+  if (!unique.size) {
+    failed.value = true
+    message.value = '请输入英文单词或词组，每行一条，最多 100 个字符。'
+    return
+  }
+  preview.value = {
+    id: 'local-words-text-' + crypto.randomUUID(), format: '文本', skipped,
+    words: [...unique.values()].map(word => ({ word, meanings: [] })),
+  }
+  if (!name.value) name.value = '我的词书'
+  failed.value = false
+  message.value = ''
+}
+
+/** 分批查词并保留已得到的结果。未收录或断网时，原始词条仍可导入。 */
+async function enrichPreview() {
+  const file = preview.value
+  if (!file || busy.value) return
+  const controller = new AbortController()
+  lookup.value = controller
+  busy.value = true
+  failed.value = false
+  const rows = file.words.filter(row => !row.details)
+  let checked = 0
+  let matched = file.words.length - rows.length
+  try {
+    for (let i = 0; i < rows.length && !controller.signal.aborted; i += 4) {
+      message.value = `正在补全词条（${checked}/${rows.length}）…`
+      await Promise.all(rows.slice(i, i + 4).map(async row => {
+        const result = await lookupWordDetails(row.word, controller.signal)
+        if (result.details) {
+          row.details = result.details
+          matched++
+        }
+        checked++
+      }))
+      triggerRef(preview)
+    }
+    const label = controller.signal.aborted ? '已停止查询' : '查询完成'
+    message.value = `${label}，${matched} 条已补全，${file.words.length - matched} 条保留原资料。`
+  } finally {
+    lookup.value = undefined
+    busy.value = false
+  }
+}
 
 /** 从文件选择器读取词表，通过本机接口生成预览，确认前不写入词书。 */
 async function readFile(event: Event) {
@@ -91,11 +156,10 @@ async function saveWords() {
   }
 
   const spellings = new Set(existing?.words.map(word => word.word.trim().toLowerCase()))
-  const words = file.words.filter(row => !spellings.has(row.word.toLowerCase())).map(row => getDefaultWord({
-    custom: true,
-    word: row.word,
-    trans: row.meanings.map(cn => ({ pos: '', cn })),
-  }))
+  const words = file.words.filter(row => !spellings.has(row.word.toLowerCase())).map(row => {
+    const word = getDefaultWord({ custom: true, word: row.word, trans: row.meanings.map(cn => ({ pos: '', cn })) })
+    return row.details ? fillWordDetails(word, row.details) : word
+  })
   if (!words.length) {
     message.value = '词书已包含这些词条。'
     return
@@ -144,9 +208,11 @@ async function saveWords() {
         <h1 class="page-title">导入词书</h1>
       </div>
       <p v-if="target">追加到「{{ target.name }}」</p>
+      <Textarea v-model="pastedWords" placeholder="输入或粘贴英文单词和词组，每行一条" :autosize="{ minRows: 3, maxRows: 6 }" />
       <p>支持 XLS、XLSX、XLSM、ODS、CSV、TSV、PDF。表格建议使用「单词」和「释义」列。PDF 请使用每行一个词条的文字版词表，扫描件需先做 OCR。</p>
       <input ref="picker" type="file" :accept="accepted" hidden @change="readFile" />
       <div class="flex flex-wrap gap-2">
+        <BaseButton :disabled="busy || !store.load || (!!targetId && !target)" @click="previewText">预览输入词条</BaseButton>
         <BaseButton :disabled="busy || !store.load || (!!targetId && !target)" @click="picker?.click()">选择词表文件</BaseButton>
         <BaseButton type="info" :disabled="busy" @click="router.push('/words')">返回我的词典</BaseButton>
       </div>
@@ -157,13 +223,20 @@ async function saveWords() {
         <ul>
           <li v-for="word in preview.words.slice(0, 10)" :key="word.word" class="py-1">
             <strong>{{ word.word }}</strong>
-            <span v-if="word.meanings.length"> · {{ word.meanings.join('；') }}</span>
+            <span v-if="word.meanings.length || word.details?.trans.length">
+              · {{ word.meanings.length ? word.meanings.join('；') : word.details?.trans.map(entry => entry.cn).join('；') }}
+            </span>
+            <span v-if="word.details" class="ml-2 text-sm">已补全</span>
           </li>
         </ul>
         <label v-if="!targetId" class="flex items-center gap-2">
           词书名称 <BaseInput v-model="name" :maxlength="20" />
         </label>
-        <div><BaseButton :loading="busy" :disabled="busy" @click="saveWords">确认导入</BaseButton></div>
+        <div class="flex flex-wrap gap-2">
+          <BaseButton type="info" :disabled="busy" @click="enrichPreview">联网一键补全</BaseButton>
+          <BaseButton v-if="lookup" type="info" @click="lookup.abort()">停止补全</BaseButton>
+          <BaseButton :disabled="busy" @click="saveWords">确认导入</BaseButton>
+        </div>
       </div>
     </section>
   </BasePage>

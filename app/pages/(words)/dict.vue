@@ -12,12 +12,12 @@ import {
   Textarea,
   Toast,
 } from '@/base'
-import { queryWord } from '@/core/apis/words.ts'
 import EditBook from '@/components/article/EditBook.vue'
 import BaseTable from '@/components/BaseTable.vue'
 import PracticeSettingDialog from '@/components/word/PracticeSettingDialog.vue'
 import WordItem from '@/components/word/WordItem.vue'
 import { flushStatToStore, usePracticeWordPersistence } from '@/core/composables/usePracticePersistence'
+import { useDataSyncPersistence } from '@/core/composables/useDataSyncPersistence'
 import { DICT_LIST, LIB_JS_URL, TourConfig } from '@/core/config/env.ts'
 import { getCurrentStudyWord } from '@/core/hooks/dict.ts'
 import { useBaseStore } from '@/core/stores/base.ts'
@@ -39,6 +39,7 @@ import {
   useNav,
 } from '@/core/utils'
 import { getPracticeWordCacheLocal } from '@/core/utils/cache.ts'
+import { fillWordDetails, lookupWordDetails } from '@/core/utils/word-details'
 import saveAs from 'file-saver'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -47,6 +48,7 @@ import { useRoute, useRouter } from 'vue-router'
 const runtimeStore = useRuntimeStore()
 const wordPersistence = usePracticeWordPersistence()
 const base = useBaseStore()
+const persistence = useDataSyncPersistence()
 const router = useRouter()
 const route = useRoute()
 const isMob = isMobile()
@@ -81,25 +83,11 @@ const wordRules = reactive({
 let studyLoading = $ref(false)
 let officialWordSnapshot = $ref<Word | null>(null)
 let wordSearchLoading = $ref(false)
+let enrichingWord = $ref<string | null>(null)
 
 function resetWordForm() {
   wordForm = getDefaultFormWord()
   officialWordSnapshot = null
-}
-
-function normalizeApiWord(apiData: Record<string, any>): Word {
-  const relWords = apiData.relWords ?? apiData.rel_words
-  return getDefaultWord({
-    ...apiData,
-    id: '',
-    relWords: relWords ?? { root: '', rels: [] },
-    synos: apiData.synos ?? [],
-    etymology: apiData.etymology ?? [],
-    trans: apiData.trans ?? [],
-    sentences: apiData.sentences ?? [],
-    phrases: apiData.phrases ?? [],
-    custom: false,
-  })
 }
 
 function wordContentKey(word: Word) {
@@ -127,28 +115,117 @@ function onWordFormWordChange(value: string) {
   }
 }
 
-async function searchOfficialWord() {
+/** 搜索图标补全表单，底部按钮可同时保存当前词条。 */
+async function searchOfficialWord(save = false) {
   const word = wordForm.word?.trim()
-  if (!word) {
-    Toast.warning('请输入单词')
+  if (!word || word.length > 100) {
+    Toast.warning('请输入 1 至 100 个字符的英文单词或词组')
     return
   }
+  if (wordSearchLoading || enrichingWord !== null) return
+  const form = wordForm
+  const bookId = runtimeStore.editDict.id
   wordSearchLoading = true
   try {
-    const res = await queryWord({ word })
-    if (!res.success || !res.data) {
-      officialWordSnapshot = null
-      Toast.warning('单词未收录')
+    const result = await lookupWordDetails(word)
+    if (wordForm !== form || wordForm.word.trim() !== word || runtimeStore.editDict.id !== bookId) return
+    if (!result.details) {
+      Toast.warning(result.error)
       return
     }
-    const normalized = normalizeApiWord(res.data)
-    const note = wordForm.note
-    const formId = wordForm.id
-    wordForm = word2Str({ ...normalized, id: formId })
-    wordForm.note = note
-    officialWordSnapshot = convertToWord({ ...wordForm })
+    const current = convertToWord({ ...wordForm, word })
+    const filled = fillWordDetails(current, result.details)
+    if (save) {
+      const entry = getDefaultWord({ ...filled, id: wordForm.id || getDefaultWord().id, custom: true })
+      if (await saveEnrichedWord(entry, bookId, wordForm.id, wordForm.note)) {
+        if (wordForm === form) {
+          if (form.id) editWord(entry)
+          else resetWordForm()
+        }
+        Toast.success(form.id ? '已补全并保存' : '已补全并添加')
+      }
+    } else {
+      wordForm = { ...word2Str(filled), note: form.note }
+      officialWordSnapshot = convertToWord({ ...wordForm })
+    }
   } finally {
     wordSearchLoading = false
+  }
+}
+
+/** 把补全结果写入原词书，保留词书 ID、学习位置和词条顺序。 */
+async function saveEnrichedWord(entry: Word, bookId: Dict['id'], originalId?: Word['id'], note?: string) {
+  const index = base.word.bookList.findIndex(book => book.id === bookId && (book.custom || book.system))
+  if (index < 0) {
+    Toast.warning('找不到可编辑的词书')
+    return false
+  }
+  const book = base.word.bookList[index]
+  const position = originalId ? book.words.findIndex(word => word.id === originalId) : -1
+  if (originalId && position < 0) {
+    Toast.warning('词条已移除，请刷新列表')
+    return false
+  }
+  if (book.words.some((word, i) => i !== position && word.word.trim().toLowerCase() === entry.word.toLowerCase())) {
+    Toast.warning('已有相同名称单词')
+    return false
+  }
+  const words = [...book.words]
+  if (originalId) words[position] = entry
+  else words.push(entry)
+  const oldNote = base.noteData[entry.word]
+  if (note?.trim()) base.noteData[entry.word] = note.trim()
+  base.word.bookList[index] = getDefaultDict({ ...book, words, length: words.length })
+  const updated = base.word.bookList[index]
+  try {
+    await persistence.saveDictState(base.$state, { canSyncRemote: false })
+  } catch {
+    if (base.word.bookList[index] === updated) base.word.bookList[index] = book
+    if (note?.trim() && base.noteData[entry.word] === note.trim()) {
+      if (oldNote === undefined) delete base.noteData[entry.word]
+      else base.noteData[entry.word] = oldNote
+    }
+    Toast.warning('保存失败，请重试')
+    return false
+  }
+  if (runtimeStore.editDict.id === bookId) {
+    runtimeStore.editDict = getDefaultDict(updated)
+    allList = runtimeStore.editDict.words
+    tableRef.value?.getData()
+  }
+  return true
+}
+
+/** 已保存词条可直接补全，同时保留编辑区里正在输入的内容。 */
+async function enrichSavedWord(word: Word) {
+  if (wordSearchLoading || enrichingWord !== null || !word.id) return
+  const bookId = runtimeStore.editDict.id
+  enrichingWord = String(word.id)
+  try {
+    const result = await lookupWordDetails(word.word)
+    if (runtimeStore.editDict.id !== bookId) return
+    if (!result.details) {
+      Toast.warning(result.error)
+      return
+    }
+    const current = allList.find(item => item.id === word.id && item.word === word.word)
+    if (!current) return
+    const filled = fillWordDetails(current, result.details)
+    if (isSameWordContent(current, filled)) {
+      Toast.success('词条资料已齐全')
+      return
+    }
+    if (await saveEnrichedWord(filled, bookId, current.id)) {
+      if (wordForm.id === current.id && wordForm.word === current.word) {
+        const details = word2Str(filled)
+        for (const key of Object.keys(details) as Array<keyof typeof wordForm>) {
+          if (typeof wordForm[key] === 'string' && !wordForm[key].trim()) wordForm[key] = details[key]
+        }
+      }
+      Toast.success('词条已补全')
+    }
+  } finally {
+    enrichingWord = null
   }
 }
 
@@ -157,7 +234,8 @@ function syncDictInMyStudyList(study = false) {
     const originalId = runtimeStore.editDict.id
 
     runtimeStore.editDict.words = allList
-    let temp = ensureCustomDictCopy(runtimeStore.editDict)
+    const dict = runtimeStore.editDict
+    let temp = dict.custom || dict.system ? getDefaultDict(dict) : ensureCustomDictCopy(dict)
     let rIndex = base.word.bookList.findIndex(v => v.id === originalId)
     temp.length = temp.words.length
     runtimeStore.editDict = temp
@@ -526,7 +604,7 @@ function getLocalList({ pageNo, pageSize, searchKey }) {
 }
 
 async function requestList({ pageNo, pageSize, searchKey }) {
-  if (!dict.custom && !dict.system) {
+  if (!dict.custom && !dict.system && dict.url) {
     // 非自定义词典，直接请求json
 
     //如果没数据则请求
@@ -641,26 +719,38 @@ defineRender(() => {
                     {{
                       prefix: () => val.checkbox(val.item),
                       suffix: () => (
-                        <div class="flex flex-col">
-                          <BaseIcon
-                            class="option-icon"
-                            disabled={!editable}
-                            title={runtimeStore.editDict.custom ? $t('edit') : $t('create_copy_to_edit')}
-                            onClick={() => runtimeStore.editDict.custom && editWord(val.item)}
-                          >
-                            <IconFluentTextEditStyle20Regular />
-                          </BaseIcon>
-                          {editable ? (
-                            <PopConfirm title="确认删除？" onConfirm={() => batchDel([val.item.id])}>
-                              <BaseIcon class="option-icon" title={$t('delete')}>
+                        <div class="flex items-start gap-2">
+                          {editable && (
+                            <button
+                              type="button"
+                              class="color-link whitespace-nowrap text-sm"
+                              disabled={wordSearchLoading || enrichingWord !== null}
+                              onClick={event => { event.stopPropagation(); void enrichSavedWord(val.item) }}
+                            >
+                              {enrichingWord === String(val.item.id) ? '补全中…' : '一键补全'}
+                            </button>
+                          )}
+                          <div class="flex flex-col">
+                            <BaseIcon
+                              class="option-icon"
+                              disabled={!editable}
+                              title={runtimeStore.editDict.custom ? $t('edit') : $t('create_copy_to_edit')}
+                              onClick={() => runtimeStore.editDict.custom && editWord(val.item)}
+                            >
+                              <IconFluentTextEditStyle20Regular />
+                            </BaseIcon>
+                            {editable ? (
+                              <PopConfirm title="确认删除？" onConfirm={() => batchDel([val.item.id])}>
+                                <BaseIcon class="option-icon" title={$t('delete')}>
+                                  <DeleteIcon />
+                                </BaseIcon>
+                              </PopConfirm>
+                            ) : (
+                              <BaseIcon class="option-icon" disabled={true} title={$t('create_copy_to_edit')}>
                                 <DeleteIcon />
                               </BaseIcon>
-                            </PopConfirm>
-                          ) : (
-                            <BaseIcon class="option-icon" disabled={true} title={$t('create_copy_to_edit')}>
-                              <DeleteIcon />
-                            </BaseIcon>
-                          )}
+                            )}
+                          </div>
                         </div>
                       ),
                     }}
@@ -688,8 +778,8 @@ defineRender(() => {
                       searchable
                       searchLoading={wordSearchLoading}
                       clearable
-                      onSearch={searchOfficialWord}
-                      onEnter={searchOfficialWord}
+                      onSearch={() => searchOfficialWord()}
+                      onEnter={() => searchOfficialWord()}
                     />
                   </FormItem>
                   <FormItem label="英音音标">
@@ -756,6 +846,9 @@ defineRender(() => {
                   </FormItem>
                 </Form>
                 <div class="center">
+                  <BaseButton type="info" loading={wordSearchLoading} disabled={enrichingWord !== null} onClick={() => searchOfficialWord(true)}>
+                    {wordForm.id ? '一键补全并保存' : '一键补全并添加'}
+                  </BaseButton>
                   <BaseButton type="info" onClick={closeWordForm}>
                     {$t('close')}
                   </BaseButton>
