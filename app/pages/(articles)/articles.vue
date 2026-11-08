@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isAndroidApp } from '@/core/utils/mobile-sync'
 import { BaseButton, BaseIcon, BasePage, DeleteIcon, PopConfirm, Progress, Toast } from '@/base'
 import Book from '@/components/Book.vue'
 import ImportLocalBook from '@/components/article/ImportLocalBook.vue'
@@ -285,6 +286,7 @@ const { data: recommendBookList, isFetching } = useFetch(resourceWrap(DICT_LIST.
       <div class="flex justify-between">
         <div class="title">{{ $t('my_books') }}</div>
         <div class="flex gap-4 items-center">
+          <NuxtLink to="/library" class="color-link">小说书架</NuxtLink>
           <PopConfirm title="确认删除所有选中书籍？" @confirm="handleBatchDel" v-if="selectIds.length">
             <BaseIcon class="del" :title="$t('delete')">
               <DeleteIcon />
@@ -303,12 +305,12 @@ const { data: recommendBookList, isFetching } = useFetch(resourceWrap(DICT_LIST.
           >
             {{ isMultiple ? $t('cancel') : $t('manage_books') }}
           </div>
-          <div class="color-link cursor-pointer" @click="nav('/book/new', { isAdd: true })">
+          <div v-if="!isAndroidApp()" class="color-link cursor-pointer" @click="nav('/book/new', { isAdd: true })">
             {{ $t('create_personal_book') }}
           </div>
         </div>
       </div>
-      <ImportLocalBook class="mt-4" />
+      <ImportLocalBook v-if="!isAndroidApp()" class="mt-4" />
       <div class="flex gap-4 flex-wrap mt-4">
         <Book
           :is-add="false"
@@ -321,7 +323,7 @@ const { data: recommendBookList, isFetching } = useFetch(resourceWrap(DICT_LIST.
           v-for="(item, j) in base.article.bookList"
           @click="goBookDetail(item)"
         />
-        <Book :is-add="true" @click="router.push('/book-list')" />
+        <Book v-if="!isAndroidApp()" :is-add="true" @click="router.push('/book-list')" />
       </div>
     </div>
 

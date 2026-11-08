@@ -1,4 +1,5 @@
 <script setup lang="tsx">
+import { isAndroidApp } from '@/core/utils/mobile-sync'
 import {
   BackIcon,
   BaseButton,
@@ -652,12 +653,12 @@ defineRender(() => {
                 <BaseButton loading={studyLoading || loading} type="info" onClick={() => (isEdit = true)}>
                   {$t('edit')}
                 </BaseButton>
-              ) : (
+              ) : !isAndroidApp() && (
                 <BaseButton loading={studyLoading || loading} type="info" onClick={createCopy}>
                   {$t('create_copy')}
                 </BaseButton>
               )}
-              {editable && (
+              {editable && !isAndroidApp() && (
                 <BaseButton type="info" onClick={goImportPage}>导入词条</BaseButton>
               )}
               <BaseButton loading={studyLoading || loading} type="info" onClick={startTest}>

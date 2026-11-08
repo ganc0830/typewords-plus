@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isAndroidApp } from '@/core/utils/mobile-sync'
 import { useBaseStore } from '@/core/stores/base.ts'
 import { useRouter } from 'vue-router'
 import {
@@ -882,10 +883,10 @@ onUnmounted(() => {
           >
             {{ isManageDict ? $t('cancel') : $t('manage_dict') }}
           </div>
-          <div class="color-link cursor-pointer" @click="nav('/dict', { isAdd: true })">
+          <div v-if="!isAndroidApp()" class="color-link cursor-pointer" @click="nav('/dict', { isAdd: true })">
             {{ $t('create_personal_dict') }}
           </div>
-          <NuxtLink class="color-link" to="/import">导入词书</NuxtLink>
+          <NuxtLink v-if="!isAndroidApp()" class="color-link" to="/import">导入词书</NuxtLink>
         </div>
       </div>
       <p v-if="store.word.bookList.length > 4 && !isManageDict" class="mt-2 text-sm">拖动书卡可调整顺序</p>
@@ -910,7 +911,7 @@ onUnmounted(() => {
             @click="goDictDetail(item)"
           />
         </div>
-        <Book :is-add="true" @click="router.push('/dict-list')" />
+        <Book v-if="!isAndroidApp()" :is-add="true" @click="router.push('/dict-list')" />
       </div>
     </div>
 

@@ -14,6 +14,8 @@ import { useI18n } from 'vue-i18n'
 import { Supabase } from '@/core/utils/supabase.ts'
 import MiniProgram from '@/components/MiniProgram.vue'
 import WordCollectPopover from '@/components/word/WordCollectPopover.vue'
+import { isAndroidApp, mobileStatus } from '@/core/utils/mobile-sync'
+const androidApp = isAndroidApp()
 
 const router = useRouter()
 const { toggleTheme, getTheme, setTheme } = useTheme()
@@ -91,15 +93,19 @@ function onMouseLeave() {
           <IconFluentBookLetter20Regular />
           <span>{{ $t('articles') }}</span>
         </NuxtLink>
-        <NuxtLink to="/feedback" class="row">
+        <NuxtLink to="/library" class="row">
+          <IconFluentBookLetter20Regular />
+          <span>小说与书籍</span>
+        </NuxtLink>
+        <NuxtLink v-if="!androidApp" to="/feedback" class="row">
           <IconFluentCommentEdit20Regular />
           <span>{{ $t('feedback') }}</span>
         </NuxtLink>
-        <NuxtLink to="/doc" class="row">
+        <NuxtLink v-if="!androidApp" to="/doc" class="row">
           <IconFluentDocument20Regular />
           <span>{{ $t('document') }}</span>
         </NuxtLink>
-        <NuxtLink to="/help" class="row">
+        <NuxtLink v-if="!androidApp" to="/help" class="row">
           <IconFluentQuestionCircle20Regular />
           <span>{{ $t('help') }}</span>
         </NuxtLink>
@@ -120,7 +126,7 @@ function onMouseLeave() {
     <!-- 移动端顶部菜单栏 -->
     <div class="mobile-top-nav" :class="{ collapsed: settingStore.mobileNavCollapsed }">
       <div class="nav-items">
-        <div class="nav-item" @click="router.push('/')" :class="{ active: route.path === '/' }">
+        <div v-if="!androidApp" class="nav-item" @click="router.push('/')" :class="{ active: route.path === '/' }">
           <IconFluentHome20Regular />
           <span>{{ $t('home_page') }}</span>
         </div>
@@ -132,7 +138,11 @@ function onMouseLeave() {
           <IconFluentBookLetter20Regular />
           <span>{{ $t('articles') }}</span>
         </div>
-        <div class="nav-item" @click="router.push('/setting')" :class="{ active: route.path === '/setting' }">
+        <div class="nav-item" @click="router.push('/library')" :class="{ active: route.path === '/library' }">
+          <IconFluentBookLetter20Regular />
+          <span>书籍</span>
+        </div>
+        <div v-if="!androidApp" class="nav-item" @click="router.push('/setting')" :class="{ active: route.path === '/setting' }">
           <IconFluentSettings20Regular />
           <span>{{ $t('setting') }}</span>
           <div class="red-point" v-if="runtimeStore.isError"></div>
@@ -147,6 +157,7 @@ function onMouseLeave() {
     <IeDialog />
 
     <div class="flex-1 z-1 relative main-content overflow-x-hidden">
+      <NuxtLink to="/mobile-sync" class="block text-sm px-4 py-2 color-link">{{ mobileStatus }} · 同步</NuxtLink>
       <div
         class="mt-3 center relative z-9999 pointer-events-none"
         @click="router.push('/setting?index=6 ')"

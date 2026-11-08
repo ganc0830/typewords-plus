@@ -1,0 +1,5 @@
+<Project ToolsVersion="Current" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><ProjectGuid>{C8624853-C889-4B71-AB11-62EC790267B7}</ProjectGuid><Name>TypeWords.Android</Name></PropertyGroup>
+  <ItemGroup><Content Include="AndroidManifest.xml;build.ps1;src\cc\typewords\offline\MainActivity.java" /></ItemGroup>
+  <Target Name="Build"><Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)\build.ps1&quot;" /></Target>
+</Project>

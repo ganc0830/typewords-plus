@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isAndroidApp } from '@/core/utils/mobile-sync'
 import Empty from '@/components/Empty.vue'
 import ArticleList from '@/components/list/ArticleList.vue'
 import { useBaseStore } from '@/core/stores/base.ts'
@@ -346,11 +347,12 @@ function play(sentence: Sentence, onEnd: () => void) {
             <BaseButton v-if="runtimeStore.editDict.custom && runtimeStore.editDict.url" type="info" @click="reset">
               {{ $t('restore_default') }}
             </BaseButton>
-            <BaseButton v-if="!runtimeStore.editDict.custom" type="info" @click="createCopy">{{
+            <NuxtLink :to="'/reader/' + encodeURIComponent(String(runtimeStore.editDict.id))" class="p-2 color-link">小说阅读</NuxtLink>
+            <BaseButton v-if="!isAndroidApp() && !runtimeStore.editDict.custom" type="info" @click="createCopy">{{
               $t('create_copy')
             }}</BaseButton>
             <BaseButton
-              v-if="runtimeStore.editDict.custom"
+              v-if="!isAndroidApp() && runtimeStore.editDict.custom"
               :loading="studyLoading || loading"
               type="info"
               @click="isEdit = true"

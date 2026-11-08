@@ -64,3 +64,11 @@ Windows 本机已验证七种词书格式的解析，并通过 Edge 验证了新
 感谢 [zyronon](https://github.com/zyronon) 和 [TypeWords 的所有贡献者](https://github.com/zyronon/TypeWords/graphs/contributors) 开源原项目，提供了单词和文章练习、词库和界面基础。本项目基于上游提交 `1bcc2a2`，保留上游 Git 历史和 [GPL-3.0 许可证](LICENSE)。上游项目介绍见 [原版中文文档](docs/README.zh-CN.md)。
 
 感谢 [hexgrad 和 Kokoro 贡献者](https://huggingface.co/hexgrad/Kokoro-82M)、[thewh1teagle 和 kokoro-onnx 贡献者](https://github.com/thewh1teagle/kokoro-onnx)，以及 [Resemble AI 的 Chatterbox 团队](https://github.com/resemble-ai/chatterbox) 发布本地语音模型和推理代码。
+
+## 安卓离线学习
+
+电脑页面提供小说书架、章节目录、翻页和阅读位置保存。安卓应用支持下载电脑词书和文章后离线学习。连接电脑后可以手动上传新增单词和学习进度，并逐项解决进度冲突。
+
+在电脑端设置 `TYPEWORDS_MOBILE_DATA` 为独立的数据目录，令服务监听局域网接口及端口 5567。手机和电脑接入同一局域网，在电脑的「同步」页面查看地址和配对码。词库和同步数据保存在各自的设备上。
+
+在 Windows 上先运行现有 Nuxt 生产构建。准备 JDK 21、Android SDK Platform 35 和 Build Tools 35.0.0，将 `TYPEWORDS_ANDROID_TOOLS` 指向包含 `jdk` 和 `sdk` 子目录的工具目录，运行 `pwsh -File android/build.ps1`。可通过 `TYPEWORDS_ANDROID_WORK` 指定仅用于打包的 ASCII 路径。生成的 APK 位于 `android/dist`，后续版本需沿用本机签名密钥。
