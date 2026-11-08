@@ -30,7 +30,7 @@ export default defineEventHandler(async event => {
     const item = result.data
     if (!result.success || item?.word?.toLowerCase() !== word) {
       setResponseStatus(event, 404)
-      return { error: '在线词典未收录该词。' }
+      return { error: '找不到这个词，请检查拼写。' }
     }
     const related = item.relWords ?? item.rel_words
     setHeader(event, 'Cache-Control', 'private, max-age=3600')

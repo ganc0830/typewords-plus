@@ -14,7 +14,7 @@ type WordFile = {
   id: string
   format: string
   skipped: number
-  words: Array<{ word: string; meanings: string[]; details?: Omit<Word, 'id' | 'word' | 'custom'> }>
+  words: Array<{ word: string; meanings: string[]; error?: string; details?: Omit<Word, 'id' | 'word' | 'custom'> }>
 }
 
 const route = useRoute()
@@ -80,6 +80,8 @@ async function enrichPreview() {
       message.value = `正在补全词条（${checked}/${rows.length}）…`
       await Promise.all(rows.slice(i, i + 4).map(async row => {
         const result = await lookupWordDetails(row.word, controller.signal)
+        // 每条错误留在原词旁，方便定位拼写问题并重试。
+        row.error = result.error
         if (result.details) {
           row.details = result.details
           matched++
@@ -227,6 +229,7 @@ async function saveWords() {
               · {{ word.meanings.length ? word.meanings.join('；') : word.details?.trans.map(entry => entry.cn).join('；') }}
             </span>
             <span v-if="word.details" class="ml-2 text-sm">已补全</span>
+            <span v-if="word.error" class="ml-2 text-sm text-red-600" role="alert">{{ word.error }}</span>
           </li>
         </ul>
         <label v-if="!targetId" class="flex items-center gap-2">
