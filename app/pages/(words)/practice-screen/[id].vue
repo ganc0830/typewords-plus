@@ -53,6 +53,9 @@ watch([() => store.load, book, () => book.value?.words.length], async ([ready]) 
     if (saved && Number.isInteger(saved.nextIndex) && saved.nextIndex > 0 && saved.nextIndex < source.value.length && saved.done >= 0 && saved.added >= 0) {
       position.value = saved
     }
+    if (source.value.length && (position.value.done || !current.value)) {
+      await saveBookProgress(current.value?.index ?? source.value.length)
+    }
   } catch {
     Toast.warning('无法读取词书或筛词位置，请检查后重试。')
   } finally { loading.value = false }
@@ -68,39 +71,58 @@ function advance(index: number, added = false) {
   void nextTick(() => input.value?.focus())
 }
 
-/** 主动跳过时先保存掌握记录，再推进筛词位置。 */
-async function skip() {
-  const item = current.value
-  if (!item || saving.value) return
-  if (known.value.has(item.key)) { advance(item.index); return }
+/** 将原书位置及可选的已掌握词条一起写入词书主记录和逐书副本。 */
+async function saveBookProgress(nextIndex: number, entry?: Word): Promise<boolean> {
+  const selected = book.value
+  if (!selected || saving.value) return false
+  const previousIndex = selected.lastLearnIndex
+  const previousComplete = selected.complete
+  const newIndex = Math.max(previousIndex, nextIndex)
+  const complete = previousComplete || newIndex >= source.value.length
+  if (!entry && newIndex === previousIndex && complete === previousComplete) return true
+
   saving.value = true
+  selected.lastLearnIndex = newIndex
+  selected.complete = complete
   const knownBook = store.known
-  const entry = { ...item.word }
-  knownBook.words.push(entry)
-  knownBook.length = knownBook.words.length
+  if (entry) {
+    knownBook.words.push(entry)
+    knownBook.length = knownBook.words.length
+  }
   try {
     await persistence.saveDictState(store.$state, { canSyncRemote: false })
-    advance(item.index, true)
+    return true
   } catch {
-    const index = knownBook.words.findIndex(word => toRaw(word) === entry)
-    if (index >= 0) knownBook.words.splice(index, 1)
-    knownBook.length = knownBook.words.length
-    Toast.warning('已掌握记录保存失败，请重试。')
+    if (selected.lastLearnIndex === newIndex && selected.complete === complete) {
+      selected.lastLearnIndex = previousIndex
+      selected.complete = previousComplete
+    }
+    if (entry) {
+      const index = knownBook.words.findIndex(word => toRaw(word) === entry)
+      if (index >= 0) knownBook.words.splice(index, 1)
+      knownBook.length = knownBook.words.length
+    }
+    Toast.warning('词书进度保存失败，请重试。')
+    return false
   } finally { saving.value = false }
 }
 
-/** 跟写正确后进入下一词。 */
-function finishWord() {
-  if (!current.value || saving.value) return
-  mistake.value = normalize(spelling.value) !== current.value.key
-  if (!mistake.value) advance(current.value.index)
+/** 按原书推进到下一待筛词。只有主动跳过才新增已掌握记录。 */
+async function finishWord(skipped = false) {
+  const item = current.value
+  if (!item || saving.value) return
+  mistake.value = !skipped && normalize(spelling.value) !== item.key
+  if (mistake.value) return
+  const entry = skipped ? { ...item.word } : undefined
+  const nextIndex = remaining.value[1]?.index ?? source.value.length
+  if (await saveBookProgress(nextIndex, entry)) advance(item.index, skipped)
 }
 
 /** 输入框里沿用用户设置的跳过快捷键，其他键保留浏览器行为。 */
 function handleKey(event: KeyboardEvent) {
   if (!skipKey.value || event.key !== skipKey.value || event.repeat || event.isComposing || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return
   event.preventDefault()
-  void skip()
+  void finishWord(true)
 }
 </script>
 
@@ -112,6 +134,7 @@ function handleKey(event: KeyboardEvent) {
     <p v-else-if="!source.length">这本词书没有可筛选的单词。</p>
     <section v-else class="card space-y-4">
       <h2 class="text-lg">{{ book?.name }}</h2>
+      <p>词书学习进度 {{ book?.lastLearnIndex }} / {{ source.length }} 条</p>
       <template v-if="!started && current">
         <p>全书 {{ source.length }} 条 · 已掌握 {{ mastered }} 词 · 重复 {{ source.length - unique.length }} 条</p>
         <p>待筛 {{ remaining.length }} 词。主动跳过会将当前词加入「已掌握」。</p>
@@ -124,12 +147,12 @@ function handleKey(event: KeyboardEvent) {
           <BaseButton type="info" @click="playAudio(current.word.word)">播放发音</BaseButton>
         </div>
         <p v-if="current.word.trans?.length">{{ current.word.trans.map(item => [item.pos, item.cn].filter(Boolean).join(' ')).join('；') }}</p>
-        <form class="space-y-3" @submit.prevent="finishWord">
+        <form class="space-y-3" @submit.prevent="finishWord()">
           <input ref="input" v-model="spelling" class="w-full border rounded p-3" aria-label="跟写当前单词" placeholder="跟写当前单词" autocomplete="off" spellcheck="false" :readonly="saving" @keydown="handleKey" />
           <p v-if="mistake" role="alert" class="text-red-600">拼写有误，请对照单词再试一次。</p>
           <div class="flex flex-wrap gap-3">
-            <BaseButton type="info" :loading="saving" @click="skip">跳过并标为已掌握</BaseButton>
-            <BaseButton :disabled="saving" @click="finishWord">练完，下一词</BaseButton>
+            <BaseButton type="info" :loading="saving" @click="finishWord(true)">跳过并标为已掌握</BaseButton>
+            <BaseButton :disabled="saving" @click="finishWord()">练完，下一词</BaseButton>
           </div>
           <p v-if="skipKey" class="text-sm">跳过快捷键 {{ skipKey }}</p>
         </form>
