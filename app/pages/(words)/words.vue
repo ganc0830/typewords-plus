@@ -766,6 +766,14 @@ onUnmounted(() => {
             </BaseButton>
             <template #options>
               <BaseButton
+                v-if="!isAndroidApp()"
+                class="w-full"
+                :disabled="!store.sdict.id"
+                @click="router.push('/practice-screen/' + encodeURIComponent(String(store.sdict.id)))"
+              >
+                整本筛词
+              </BaseButton>
+              <BaseButton
                 class="w-full"
                 v-if="
                   settingStore.wordPracticeMode !== WordPracticeMode.System &&
