@@ -9,6 +9,7 @@ export const EMAIL = 'zyronon@163.com'
 export const Origin = `https://${Host}`
 export const APP_NAME = 'Type Words'
 export const IS_DEV = import.meta.env.MODE === 'development'
+export const MOBILE_FULL_LIBRARY_KEY = 'typewords-mobile-full-library'
 
 const common = {
   word_dict_list_version: 1,

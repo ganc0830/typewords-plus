@@ -5,7 +5,7 @@ import { shallowReactive } from 'vue'
 import { get, setMany } from 'idb-keyval'
 import { readWordBookProgress, wordBookProgress, wordBookProgressEntries } from '../utils/word-book-progress'
 import { restoreScreeningChanges } from '../utils/screening-journal'
-import { DictId, IS_DEV, SAVE_DICT_KEY } from '../config/env'
+import { DictId, IS_DEV, MOBILE_FULL_LIBRARY_KEY, SAVE_DICT_KEY } from '../config/env'
 import type { Card } from 'ts-fsrs'
 import { useSettingStore } from './setting.ts'
 
@@ -97,6 +97,30 @@ export const getDefaultBaseState = (): BaseState => ({
   noteData: {},
   _ignoreWatch: false,
 })
+
+/** 在 state 公开给页面前补齐 Android 已下载的普通书籍正文，保留当前进度和空的个人词单。 */
+async function restoreDownloadedLibrary(state: BaseState): Promise<void> {
+  if (typeof window === 'undefined' || !(window as any).TypeWordsAndroid) return
+  try {
+    const full = await get<BaseState>(MOBILE_FULL_LIBRARY_KEY)
+    if (!full) return
+    for (const kind of ['word', 'article'] as const) {
+      const field = kind === 'word' ? 'words' : 'articles'
+      for (const book of state[kind].bookList) {
+        // 自建和系统词单已完整存于主记录，空数组可能表示用户刚删除了最后一个词。
+        if (book.custom || book.system || book[field]?.length) continue
+        const cached = full[kind]?.bookList?.find(item => item[field]?.length && isSameDictResource(item, book))
+        if (cached) {
+          if (kind === 'word') book.words = cached.words
+          else book.articles = cached.articles
+        }
+      }
+    }
+  } catch (error) {
+    // 缓存异常不能阻止主记录和已保存进度继续加载。
+    console.warn('Could not restore the downloaded library.', error)
+  }
+}
 
 export const useBaseStore = defineStore('base', {
   state: (): BaseState => {
@@ -193,6 +217,7 @@ export const useBaseStore = defineStore('base', {
           let jsonStr: string = await get(SAVE_DICT_KEY.key)
           if (jsonStr) {
             let result = await parseJsonStr(jsonStr, checkAndUpgradeSaveDict)
+            await restoreDownloadedLibrary(result.val)
             const screeningUpdatedAt = await restoreScreeningChanges(result.val)
             if (screeningUpdatedAt && (!result.updated_at || screeningUpdatedAt > result.updated_at)) result.updated_at = screeningUpdatedAt
             // console.log('data', data)

@@ -5,6 +5,7 @@ import { getDefaultBaseState, useBaseStore } from '../stores/base'
 import { useDataSyncPersistence } from '../composables/useDataSyncPersistence'
 import { _getDictDataByUrl, isSameDictResource } from './index'
 import { DictType } from '../types/enum'
+import { MOBILE_FULL_LIBRARY_KEY } from '../config/env'
 
 export const isAndroidApp = () => typeof window !== 'undefined' && !!(window as any).TypeWordsAndroid
 export const mobileStatus = ref('No computer connected')
@@ -64,7 +65,7 @@ function capture() {
   return JSON.stringify(state)
 }
 
-export const mobileFullLibraryKey = 'typewords-mobile-full-library'
+export const mobileFullLibraryKey = MOBILE_FULL_LIBRARY_KEY
 
 /** 按词书身份查找已缓存正文，兼容词书 ID 和英文名两种历史格式。 */
 function libraryBook(library: any, kind: 'word' | 'article', book: any) {
@@ -109,7 +110,13 @@ async function applySnapshot(state: any, expected: string) {
     if (key.startsWith('typewords-reader:')) localStorage.setItem(key, JSON.stringify(value))
   }
   const { readerPositions, ...learning } = state
-  store.$patch({ ...learning, load: true })
+  // setState 统一将大数组设为浅响应式。先复制书目对象，避免代理写回同步快照而影响 IndexedDB 克隆。
+  store.setState({
+    ...learning,
+    word: { ...learning.word, bookList: learning.word.bookList.map(book => ({ ...book })) },
+    article: { ...learning.article, bookList: learning.article.bookList.map(book => ({ ...book })) },
+    load: true,
+  })
   await useDataSyncPersistence().saveDictState(store.$state, { canSyncRemote: false })
   return true
 }
