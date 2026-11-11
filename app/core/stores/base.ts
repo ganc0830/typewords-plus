@@ -4,6 +4,7 @@ import { _getStudyProgress, checkAndUpgradeSaveDict, isSameDictResource, parseJs
 import { shallowReactive } from 'vue'
 import { get, setMany } from 'idb-keyval'
 import { readWordBookProgress, wordBookProgress, wordBookProgressEntries } from '../utils/word-book-progress'
+import { restoreScreeningChanges } from '../utils/screening-journal'
 import { DictId, IS_DEV, SAVE_DICT_KEY } from '../config/env'
 import type { Card } from 'ts-fsrs'
 import { useSettingStore } from './setting.ts'
@@ -192,6 +193,8 @@ export const useBaseStore = defineStore('base', {
           let jsonStr: string = await get(SAVE_DICT_KEY.key)
           if (jsonStr) {
             let result = await parseJsonStr(jsonStr, checkAndUpgradeSaveDict)
+            const screeningUpdatedAt = await restoreScreeningChanges(result.val)
+            if (screeningUpdatedAt && (!result.updated_at || screeningUpdatedAt > result.updated_at)) result.updated_at = screeningUpdatedAt
             // console.log('data', data)
             this.setState(result.val)
             // 首次升级时也给现有词书建立副本，主数据可读时仍可继续学习。
@@ -201,6 +204,13 @@ export const useBaseStore = defineStore('base', {
               console.warn('词书进度副本写入失败', error)
             }
             resolve(result)
+          } else {
+            const restored = getDefaultBaseState()
+            const updated_at = await restoreScreeningChanges(restored)
+            if (updated_at) {
+              this.setState(restored)
+              resolve({ val: restored, version: SAVE_DICT_KEY.version, updated_at })
+            }
           }
           resolve(null)
         } catch (e) {

@@ -1,0 +1,6 @@
+<Project ToolsVersion="Current" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><ProjectGuid>{8EFE9B1C-B3A0-4ACD-A8CC-38F3D5DBB4AE}</ProjectGuid><Name>TypeWords</Name><StartupFile>start.mjs</StartupFile></PropertyGroup>
+  <ItemGroup><Content Include="start.mjs;nuxt.config.ts;package.json;server\api\voice.get.ts" /></ItemGroup>
+  <!-- 公开仓库的 Web 源码位于根目录；先构建前端，再由 Android 项目打包同一输出。 -->
+  <Target Name="Build"><Exec WorkingDirectory="$(MSBuildProjectDirectory)" Command="node_modules\.bin\nuxt.cmd build" EnvironmentVariables="NUXT_TELEMETRY_DISABLED=1;NODE_OPTIONS=--max-old-space-size=4096" /></Target>
+</Project>

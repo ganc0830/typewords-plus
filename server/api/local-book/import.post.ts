@@ -30,13 +30,13 @@ function parseBook(python: string, parser: string, input: Buffer, format: string
     let size = 0
     let limitError = ''
     const timer = setTimeout(() => {
-      limitError = '解析超时，请拆分文件后重试。'
+      limitError = 'Reading timed out. Split the file and try again.'
       child.kill()
     }, 180_000)
     child.stdout.on('data', (chunk: Buffer) => {
       size += chunk.length
       if (size > maxOutput) {
-        limitError = '导入结果过大，请拆分文件后重试。'
+        limitError = 'The import is too large. Split the file and try again.'
         child.kill()
         return
       }
@@ -52,52 +52,53 @@ function parseBook(python: string, parser: string, input: Buffer, format: string
     child.on('close', code => {
       clearTimeout(timer)
       if (limitError || code !== 0) {
-        reject(createError({ statusCode: 422, data: { message: limitError || '书籍解析失败。' } }))
+        reject(createError({ statusCode: 422, data: { message: limitError || 'Could not read the book.' } }))
         return
       }
       try {
         resolve(JSON.parse(Buffer.concat(output).toString('utf8')))
       } catch {
-        reject(createError({ statusCode: 422, data: { message: '书籍解析结果不完整。' } }))
+        reject(createError({ statusCode: 422, data: { message: 'The book reader returned incomplete data.' } }))
       }
     })
     child.stdin.end(input)
   })
 }
 
-/** 接收本机文件字节，书籍和词书共用回环校验、上传限制和解析进程互斥。 */
+/** 接收本机文件或已配对手机的书籍。解析格式、大小和并发限制共用。 */
 export default defineEventHandler(async event => {
   const request = event.node.req
   const host = getHeader(event, 'host') ?? ''
   const origin = getHeader(event, 'origin')
   const address = request.socket.remoteAddress ?? ''
-  if (!/^(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/i.test(host)
-      || !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(address)
-      || (origin && origin !== `http://${host}`)) {
+  const words = getQuery(event).kind === 'word'
+  const local = /^(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/i.test(host)
+    && ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(address)
+    && (!origin || origin === `http://${host}`)
+  if (!local && (!event.context.mobilePaired || words)) {
     setResponseStatus(event, 403)
-    return { error: '请从本机 TypeWords 页面导入。' }
+    return { error: 'Import on this computer or use a paired Android app for books.' }
   }
   const mime = getHeader(event, 'content-type')?.split(';', 1)[0].trim().toLowerCase()
   const format = Object.entries(studyFileTypes).find(([, type]) => type === mime)?.[0]
-  const words = getQuery(event).kind === 'word'
   if (!format || (words && !wordFileTypes.some(type => type === format))) {
     setResponseStatus(event, 415)
-    return { error: words ? '请选择支持的 Excel、ODS、CSV、TSV 或 PDF 文件。' : '请选择支持的书籍、Word 或表格文件。' }
+    return { error: words ? 'Choose a supported Excel, ODS, CSV, TSV, or PDF file.' : 'Choose a supported book, Word document, or spreadsheet.' }
   }
   const length = Number(getHeader(event, 'content-length'))
   if (!Number.isSafeInteger(length) || length <= 0 || length > maxInput) {
     setResponseStatus(event, 413)
-    return { error: '文件为空或超过 64 MB。' }
+    return { error: 'The file is empty or larger than 64 MB.' }
   }
   const python = process.env.TYPEWORDS_BOOK_PYTHON
   const parser = process.env.TYPEWORDS_BOOK_PARSER
   if (!python || !parser) {
     setResponseStatus(event, 503)
-    return { error: '本地书籍解析器尚未配置。' }
+    return { error: 'The local book reader is not configured.' }
   }
   if (importing) {
     setResponseStatus(event, 429)
-    return { error: '正在解析另一个文件，请稍后重试。' }
+    return { error: 'Another file is being processed. Try again shortly.' }
   }
 
   importing = true
@@ -109,7 +110,7 @@ export default defineEventHandler(async event => {
       size += bytes.length
       if (size > maxInput) {
         setResponseStatus(event, 413)
-        return { error: '文件超过 64 MB，请分卷导入。' }
+        return { error: 'The file exceeds 64 MB. Split it before importing.' }
       }
       chunks.push(bytes)
     }
@@ -117,18 +118,18 @@ export default defineEventHandler(async event => {
     const result = await parseBook(python, parser, input, format, words)
     if (result.error || !(words ? result.words?.length : result.articles?.length)) {
       setResponseStatus(event, 422)
-      return { error: result.error || (words ? '没有找到可导入的词条。' : '没有可学习的正文。') }
+      return { error: result.error || (words ? 'No importable entries were found.' : 'No readable text was found.') }
     }
     if (result.format !== format.toUpperCase()) {
       setResponseStatus(event, 415)
-      return { error: '文件内容与扩展名不符。' }
+      return { error: 'The file does not match its extension.' }
     }
     setHeader(event, 'Cache-Control', 'no-store')
     return { ...result, id: `local-${words ? 'words' : 'book'}-${createHash('sha256').update(input).digest('hex').slice(0, 24)}` }
   } catch (error) {
     const failure = error as { statusCode?: number; data?: { message?: string } }
     setResponseStatus(event, failure.statusCode ?? 503)
-    return { error: failure.data?.message ?? '本地书籍解析服务暂不可用，请稍后重试。' }
+    return { error: failure.data?.message ?? 'The local book reader is unavailable. Try again shortly.' }
   } finally {
     importing = false
   }

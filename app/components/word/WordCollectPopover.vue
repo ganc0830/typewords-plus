@@ -1,18 +1,33 @@
 <script setup lang="ts">
 import { BaseIcon, BaseInput, Toast } from '@/base'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, toRaw, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import { useWordOptions } from '@/core/hooks/dict.ts'
 import { closeWordCollectPicker, wordCollectPickerState } from '@/core/hooks/useWordCollectPicker.ts'
 import type { Dict } from '@/core/types'
 import { useDisableEventListener } from '@/core/hooks/event'
+import { useBaseStore } from '@/core/stores/base'
+import { isDictIdMatch } from '@/core/utils'
+import { isAndroidApp } from '@/core/utils/mobile-sync'
+import { saveScreeningChanges } from '@/core/utils/screening-journal'
 
 const { t: $t } = useI18n()
 const { getCollectibleDicts, addWordToDict, createCustomDict } = useWordOptions()
+const canCreateDict = !isAndroidApp()
+const store = useBaseStore()
+const route = useRoute()
+const router = useRouter()
 
 const popoverRef = ref<HTMLElement | null>(null)
 const positionStyle = ref({ left: '0px', top: '0px' })
 let creatingLoading = $ref(false)
+let collectingLoading = $ref(false)
+const busy = computed(() => creatingLoading || collectingLoading)
+const screening = computed(() => /(?:^|\/)practice-screen(?:\/|$)/.test(route.path))
+
+// 弹层在全局布局中，写入结束前拦住导航，防止新建词书尚未入日志就退出筛词。
+const removeNavigationGuard = router.beforeEach(() => !(screening.value && busy.value))
 
 const dictList = computed(() => getCollectibleDicts(wordCollectPickerState.excludeDictId || undefined))
 
@@ -38,15 +53,33 @@ function adjustPosition() {
   })
 }
 
-function selectDict(dict: Dict) {
+/** 将当前词加入 dict 对应的实际词书，筛词时等待日志落盘，失败仅撤回本次新增。 */
+async function selectDict(dict: Dict) {
   const word = wordCollectPickerState.word
-  if (!word) return
-  const result = addWordToDict(word, dict)
-  if (result.ok) {
+  if (!word || busy.value) return
+  const target = store.word.bookList.find(item => isDictIdMatch(item, dict.id))
+  if (!target) {
+    Toast.error($t('add_failed'))
+    return
+  }
+  const previousLength = target.length
+  const previousWordCount = target.words.length
+  if (!addWordToDict(word, target).ok) {
+    Toast.warning($t('already_in_dict'))
+    return
+  }
+  collectingLoading = true
+  try {
+    if (screening.value) await saveScreeningChanges(undefined, undefined, [target])
     Toast.success($t('add_success'))
     closeWordCollectPicker()
-  } else {
-    Toast.warning($t('already_in_dict'))
+  } catch {
+    const index = target.words.findIndex(item => toRaw(item) === toRaw(word))
+    if (index >= 0) target.words.splice(index, 1)
+    target.length = target.words.length === previousWordCount ? previousLength : target.words.length
+    Toast.error(screening.value ? 'Could not save. Reload the page and try again.' : $t('add_failed'))
+  } finally {
+    collectingLoading = false
   }
 }
 
@@ -56,34 +89,54 @@ function selectDictByIndex(index: number) {
 }
 
 function startCreating() {
+  if (busy.value) return
   wordCollectPickerState.creating = true
   wordCollectPickerState.newDictName = ''
 }
 
 function cancelCreating() {
+  if (busy.value) return
   wordCollectPickerState.creating = false
   wordCollectPickerState.newDictName = ''
 }
 
+/** 新建命名词书；筛词时持久化 store 内的副本，失败移除本次创建的空词书。 */
 async function confirmCreateDict() {
-  if (creatingLoading) return
+  if (!canCreateDict || busy.value) return
   creatingLoading = true
-  const result = await createCustomDict(wordCollectPickerState.newDictName)
-  creatingLoading = false
-  if (!result.ok) {
-    if (result.reason === 'duplicate') Toast.warning($t('name_already_exists'))
-    else if (result.reason === 'api') Toast.error($t('add_failed'))
-    return
+  let created: Dict | undefined
+  try {
+    const result = await createCustomDict(wordCollectPickerState.newDictName)
+    if (!result.ok) {
+      if (result.reason === 'duplicate') Toast.warning($t('name_already_exists'))
+      else if (result.reason === 'api') Toast.error($t('add_failed'))
+      return
+    }
+    // createCustomDict 返回源对象，真正存储的是其 clone，日志和回滚都使用列表实例。
+    created = store.word.bookList.find(item => isDictIdMatch(item, result.dict.id))
+    if (!created) {
+      Toast.error($t('add_failed'))
+      return
+    }
+    if (screening.value) await saveScreeningChanges(undefined, undefined, [created])
+    wordCollectPickerState.creating = false
+    wordCollectPickerState.newDictName = ''
+    Toast.success($t('add_success'))
+    nextTick(() => {
+      const listEl = popoverRef.value?.querySelector('.dict-list')
+      if (listEl) listEl.scrollTop = listEl.scrollHeight
+    })
+  } catch {
+    const index = store.word.bookList.findIndex(item => item === created)
+    if (index >= 0 && created?.words.length === 0) store.word.bookList.splice(index, 1)
+    Toast.error(screening.value ? 'Could not save. Reload the page and try again.' : $t('add_failed'))
+  } finally {
+    creatingLoading = false
   }
-  cancelCreating()
-  Toast.success($t('add_success'))
-  nextTick(() => {
-    const listEl = popoverRef.value?.querySelector('.dict-list')
-    if (listEl) listEl.scrollTop = listEl.scrollHeight
-  })
 }
 
 function onDocumentClick(e: MouseEvent) {
+  if (busy.value) return
   const el = popoverRef.value
   if (el && !el.contains(e.target as Node)) {
     closeWordCollectPicker()
@@ -92,6 +145,11 @@ function onDocumentClick(e: MouseEvent) {
 
 function onKeydown(e: KeyboardEvent) {
   if (!wordCollectPickerState.visible) return
+  if (busy.value) {
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    return
+  }
 
   if (e.key === 'Escape') {
     e.stopPropagation()
@@ -126,6 +184,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  removeNavigationGuard()
   document.removeEventListener('click', onDocumentClick)
   document.removeEventListener('keydown', onKeydown, true)
 })
@@ -142,11 +201,14 @@ useDisableEventListener(() => wordCollectPickerState.visible)
 
 <template>
   <Teleport to="body">
+    <div v-if="wordCollectPickerState.visible && busy" class="word-collect-blocker" aria-hidden="true" @click.stop />
     <Transition name="fade">
       <div
         v-if="wordCollectPickerState.visible"
         ref="popoverRef"
         class="word-collect-popover"
+        :class="{ 'is-busy': busy }"
+        :aria-busy="busy"
         :style="positionStyle"
         @click.stop
       >
@@ -159,7 +221,7 @@ useDisableEventListener(() => wordCollectPickerState.visible)
           </div>
         </div>
 
-        <div class="popover-footer" :class="{ 'has-divider': dictList.length }">
+        <div v-if="canCreateDict" class="popover-footer" :class="{ 'has-divider': dictList.length }">
           <div v-if="wordCollectPickerState.creating" class="create-row">
             <BaseInput
               v-model="wordCollectPickerState.newDictName"
@@ -192,6 +254,13 @@ useDisableEventListener(() => wordCollectPickerState.visible)
 </template>
 
 <style scoped lang="scss">
+.word-collect-blocker {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  cursor: progress;
+}
+
 .word-collect-popover {
   position: fixed;
   z-index: 10001;
@@ -203,6 +272,18 @@ useDisableEventListener(() => wordCollectPickerState.visible)
   padding: 0.75rem;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   pointer-events: auto;
+
+  &.is-busy {
+    cursor: progress;
+
+    .dict-item,
+    .add-dict-btn,
+    .action-btn,
+    .create-row input {
+      pointer-events: none;
+      opacity: 0.6;
+    }
+  }
 }
 
 .dict-list {

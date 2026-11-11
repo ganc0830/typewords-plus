@@ -23,12 +23,12 @@ dayjs.extend(isoWeek)
 dayjs.extend(isBetween)
 
 useSeoMeta({
-  title: `英语文章跟打练习｜${APP_NAME}`,
-  description: '在电脑上进行英语文章跟打、逐句精听和键盘输入练习，通过真实语境提升英语阅读、听力与拼写能力。',
-  ogTitle: `英语文章跟打练习｜${APP_NAME}`,
-  ogDescription: '使用英语文章跟打、逐句精听和键盘输入练习，在真实语境中提升英语能力。',
-  twitterTitle: `英语文章跟打练习｜${APP_NAME}`,
-  twitterDescription: '使用英语文章跟打、逐句精听和键盘输入练习，在真实语境中提升英语能力。',
+  title: `English Article Practice | ${APP_NAME}`,
+  description: 'Practice English reading, listening, and spelling by typing articles and listening sentence by sentence.',
+  ogTitle: `English Article Practice | ${APP_NAME}`,
+  ogDescription: 'Practice reading and listening with English articles.',
+  twitterTitle: `English Article Practice | ${APP_NAME}`,
+  twitterDescription: 'Practice reading and listening with English articles.',
 })
 
 const { nav } = useNav()
@@ -37,6 +37,7 @@ const store = useBaseStore()
 const settingStore = useSettingStore()
 const router = useRouter()
 const runtimeStore = useRuntimeStore()
+const androidApp = isAndroidApp()
 let isSaveData = $ref(false)
 const articlePersistence = usePracticeArticlePersistence()
 
@@ -108,7 +109,7 @@ function startStudy() {
   // return
   if (base.sbook.id) {
     if (!base.sbook.articles.length) {
-      return Toast.warning('没有文章可学习！')
+      return Toast.warning('There are no articles to practice.')
     }
     window.umami?.track('startStudyArticle', {
       name: base.sbook.name,
@@ -119,7 +120,7 @@ function startStudy() {
     nav('/practice-articles/' + store.sbook.id)
   } else {
     window.umami?.track('no-book')
-    Toast.warning('请先选择一本书籍')
+    Toast.warning('Choose a book first.')
   }
 }
 
@@ -140,7 +141,7 @@ function handleBatchDel() {
     }
   })
   selectIds = []
-  Toast.success('删除成功！')
+  Toast.success('Selected books deleted.')
 }
 
 function toggleSelect(item) {
@@ -160,7 +161,7 @@ async function goBookDetail(val: DictResource) {
 
 const totalSpend = $computed(() => {
   if (base.sbook.statistics?.length) {
-    return msToHourMinute(total(base.sbook.statistics, 'spend'))
+    return msToHourMinute(total(base.sbook.statistics, 'spend'), true)
   }
   return 0
 })
@@ -170,7 +171,8 @@ const todayTotalSpend = $computed(() => {
       total(
         base.sbook.statistics.filter(v => dayjs(v.startDate).isSame(dayjs(), 'day')),
         'spend'
-      )
+      ),
+      true
     )
   }
   return 0
@@ -212,12 +214,44 @@ const { data: recommendBookList, isFetching } = useFetch(resourceWrap(DICT_LIST.
 
 <template>
   <BasePage>
-    <div class="card flex flex-col md:flex-row justify-between gap-space p-4 md:p-6">
+    <section v-if="androidApp" class="android-articles" aria-labelledby="android-articles-title">
+      <header class="android-articles-heading">
+        <h1 id="android-articles-title">Articles</h1>
+        <a href="#android-article-books" class="android-article-link">My books</a>
+      </header>
+      <article class="android-article-hero">
+        <p class="android-article-eyebrow">Current practice</p>
+        <template v-if="base.sbook.id">
+          <button type="button" class="android-article-name" @click="goBookDetail(base.sbook)">{{ base.sbook.name }}</button>
+          <div class="android-article-progress">
+            <strong>{{ base.currentBookProgress }}<small>%</small></strong>
+            <span>{{ base.sbook.lastLearnIndex }} / {{ base.sbook.length }} articles</span>
+          </div>
+          <progress :value="base.currentBookProgress" max="100" aria-label="Article practice progress"></progress>
+          <button type="button" class="android-article-primary" @click="startStudy">
+            {{ isSaveData ? $t('continue_learning') : $t('start_learning') }}
+          </button>
+        </template>
+        <template v-else>
+          <h2>Start with an article</h2>
+          <p class="android-article-empty">Pick a book to practice listening and typing.</p>
+          <a href="#android-article-books" class="android-article-primary">Choose a book</a>
+        </template>
+      </article>
+      <details v-if="base.sbook.id" class="android-article-history">
+        <summary>Study history <span>Today {{ todayTotalSpend }}</span></summary>
+        <p>{{ totalDay }} study {{ totalDay === 1 ? 'day' : 'days' }} · {{ totalSpend }} total</p>
+        <div class="android-article-week" :aria-label="$t('this_week_record')">
+          <span v-for="(studied, i) in weekList" :key="i" :class="{ 'is-studied': studied }" :aria-label="`Day ${i + 1}, ${studied ? 'studied' : 'no activity'}`">{{ i + 1 }}</span>
+        </div>
+      </details>
+    </section>
+    <div v-else class="card flex flex-col md:flex-row justify-between gap-space p-4 md:p-6">
       <div class="">
         <Book
           v-if="base.sbook.id"
           :is-add="false"
-          quantifier="篇"
+          quantifier=" articles"
           :item="base.sbook"
           :show-progress="false"
           @click="goBookDetail(base.sbook)"
@@ -268,7 +302,7 @@ const { data: recommendBookList, isFetching } = useFetch(resourceWrap(DICT_LIST.
             class="w-full md:w-auto"
             size="large"
             :percentage="base.currentBookProgress"
-            :format="() => `${base.sbook?.lastLearnIndex || 0}/${base.sbook?.length || 0}篇`"
+            :format="() => `${base.sbook?.lastLearnIndex || 0}/${base.sbook?.length || 0} articles`"
             :show-text="true"
           ></Progress>
 
@@ -282,12 +316,12 @@ const { data: recommendBookList, isFetching } = useFetch(resourceWrap(DICT_LIST.
       </div>
     </div>
 
-    <div class="card flex flex-col">
+    <div :id="androidApp ? 'android-article-books' : undefined" class="card flex flex-col" :class="{ 'android-article-books': androidApp }">
       <div class="flex justify-between">
         <div class="title">{{ $t('my_books') }}</div>
         <div class="flex gap-4 items-center">
-          <NuxtLink to="/library" class="color-link">小说书架</NuxtLink>
-          <PopConfirm title="确认删除所有选中书籍？" @confirm="handleBatchDel" v-if="selectIds.length">
+          <NuxtLink to="/library" class="color-link">Bookshelf</NuxtLink>
+          <PopConfirm title="Delete all selected books?" @confirm="handleBatchDel" v-if="selectIds.length">
             <BaseIcon class="del" :title="$t('delete')">
               <DeleteIcon />
             </BaseIcon>
@@ -311,11 +345,12 @@ const { data: recommendBookList, isFetching } = useFetch(resourceWrap(DICT_LIST.
         </div>
       </div>
       <ImportLocalBook v-if="!isAndroidApp()" class="mt-4" />
-      <div class="flex gap-4 flex-wrap mt-4">
+      <div class="flex gap-4 flex-wrap mt-4" :class="{ 'android-list': isAndroidApp() }">
         <Book
           :is-add="false"
+          :compact="isAndroidApp()"
           :is-user="true"
-          quantifier="篇"
+          quantifier=" articles"
           :item="item"
           :checked="selectIds.includes(item.id)"
           @check="() => toggleSelect(item)"
@@ -327,18 +362,19 @@ const { data: recommendBookList, isFetching } = useFetch(resourceWrap(DICT_LIST.
       </div>
     </div>
 
-    <div class="card flex flex-col min-h-50" v-loading="isFetching">
+    <div class="card flex flex-col min-h-50" :class="{ 'android-article-books': androidApp }" v-loading="isFetching">
       <div class="flex justify-between">
         <div class="title">{{ $t('recommend') }}</div>
-        <div class="flex gap-4 items-center">
+        <div v-if="!androidApp" class="flex gap-4 items-center">
           <div class="color-link cursor-pointer" @click="router.push('/book-list')">{{ $t('more') }}</div>
         </div>
       </div>
 
-      <div class="flex gap-4 flex-wrap mt-4">
+      <div class="flex gap-4 flex-wrap mt-4" :class="{ 'android-list': androidApp }">
         <Book
           :is-add="false"
-          quantifier="篇"
+          :compact="androidApp"
+          quantifier=" articles"
           :item="item as any"
           v-for="(item, j) in recommendBookList"
           @click="goBookDetail(item as any)"
@@ -349,6 +385,33 @@ const { data: recommendBookList, isFetching } = useFetch(resourceWrap(DICT_LIST.
 </template>
 
 <style scoped lang="scss">
+.android-articles { padding: 20px 20px 6px; max-width: 650px; margin: auto; color: var(--android-text); }
+.android-articles-heading, .android-article-progress { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.android-articles-heading { margin-bottom: 17px; }
+.android-articles-heading h1 { margin: 0; font-size: 32px; font-weight: 700; line-height: 1.17; letter-spacing: -.045em; }
+.android-article-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--android-accent); font-size: 14px; }
+.android-article-hero { padding: 18px; border: 1px solid var(--android-line); border-radius: 22px; background: var(--android-surface); }
+.android-article-eyebrow { margin-bottom: 8px; font-size: 13px; font-weight: 600; color: var(--android-muted); }
+.android-article-name, .android-article-hero h2 { display: block; text-align: start; font-size: clamp(21px, 6vw, 27px); font-weight: 650; line-height: 1.22; overflow-wrap: anywhere; }
+.android-article-progress { align-items: baseline; margin: 16px 0 6px; }
+.android-article-progress strong { font-size: 32px; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -.05em; }
+.android-article-progress small { font-size: 17px; margin-left: 2px; }
+.android-article-progress span, .android-article-empty { color: var(--android-muted); font-size: 13px; }
+.android-article-empty { margin-top: 10px; }
+.android-article-hero progress { display: block; appearance: none; width: 100%; height: 6px; border: 0; border-radius: 6px; overflow: hidden; }
+.android-article-hero progress::-webkit-progress-bar { background: var(--android-line); }
+.android-article-hero progress::-webkit-progress-value { background: var(--android-accent); border-radius: 6px; }
+.android-article-primary { display: grid; place-items: center; width: 100%; min-height: 44px; margin-top: 18px; padding: 5px 8px; border-radius: 24px; text-align: center; font-size: 14px; font-weight: 650; color: var(--android-on-accent, #fff); background: var(--android-accent); }
+.android-article-history { margin-top: 8px; border-bottom: 1px solid var(--android-line); color: var(--android-muted); }
+.android-article-history summary { min-height: 44px; align-content: center; color: var(--android-text); font-size: 14px; font-weight: 600; }
+.android-article-history summary span { float: right; color: var(--android-muted); font-weight: 400; }
+.android-article-history p { font-size: 13px; }
+.android-article-week { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 0; }
+.android-article-week span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; font-size: 13px; background: var(--android-surface); border: 1px solid var(--android-line); }
+.android-article-week .is-studied { background: var(--android-tint); color: var(--android-accent); border-color: transparent; }
+.android-article-books { scroll-margin-top: 70px; }
+.android-article-books .title { color: var(--android-text); }
+
 .stat {
   @apply rounded-xl p-4 box-border relative flex-1 bg-[var(--bg-history)];
   border: 1px solid gainsboro;

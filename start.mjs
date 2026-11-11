@@ -6,9 +6,9 @@ const venvPython = localPath('./.venv/Scripts/python.exe')
 const modelDirectory = localPath('./voices/')
 const runtimeTemp = localPath('./runtime-temp/')
 
-// 只监听本机。安装时创建的 venv 与模型目录和源码放在同一目录。
-process.env.NITRO_HOST = '127.0.0.1'
-process.env.NITRO_PORT = '5567'
+// 默认只监听本机；手机同步时可按 README 显式配置局域网监听地址。
+process.env.NITRO_HOST ??= '127.0.0.1'
+process.env.NITRO_PORT ??= '5567'
 process.env.NUXT_TELEMETRY_DISABLED = '1'
 process.env.TYPEWORDS_BOOK_PYTHON ??= existsSync(venvPython) ? venvPython : 'python'
 process.env.TYPEWORDS_BOOK_PARSER ??= localPath('./scripts/import-local-book.py')

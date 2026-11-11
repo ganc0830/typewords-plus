@@ -1,7 +1,8 @@
 import { watch } from 'vue'
 import { get } from 'idb-keyval'
 import { useBaseStore } from '@/core/stores/base'
-import { isAndroidApp, synchronizeMobile } from '@/core/utils/mobile-sync'
+import { isAndroidApp, mobileFullLibraryKey, synchronizeMobile } from '@/core/utils/mobile-sync'
+import { isSameDictResource } from '@/core/utils'
 
 /** 启动及恢复联网时自动下载电脑资料，上传仍由用户明确点击。 */
 export default defineNuxtPlugin(nuxt => {
@@ -18,12 +19,12 @@ export default defineNuxtPlugin(nuxt => {
     if (!loaded || started) return
     started = true
     if (isAndroidApp()) {
-      const full = await get<any>('typewords-mobile-full-library')
+      const full = await get<any>(mobileFullLibraryKey)
       if (full) {
         for (const kind of ['word', 'article'] as const) {
           const field = kind === 'word' ? 'words' : 'articles'
           for (const book of store[kind].bookList) {
-            const cached = full[kind].bookList.find(item => item.id === book.id)
+            const cached = full[kind]?.bookList?.find(item => item[field]?.length && isSameDictResource(item, book))
             if (!book[field].length && cached) book[field] = cached[field]
           }
         }

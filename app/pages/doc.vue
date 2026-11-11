@@ -7,7 +7,7 @@ import { APP_NAME, Origin } from '@/core/config/env.ts'
 import type { Resource } from '@/core'
 
 let route = useRoute()
-let title = APP_NAME + ' 英语学习资源分享'
+let title = APP_NAME + ' English Learning Resources'
 useSeoMeta({
   title: title,
   description: title,
@@ -37,42 +37,42 @@ interface Category {
 const categories = ref<Category[]>([
   {
     id: 'new-concept',
-    name: '新概念英语',
-    description: '经典英语教材，适合系统学习',
+    name: 'New Concept English',
+    description: 'Classic course books for structured English study.',
     resources: [
       {
-        name: '新概念资源合集',
+        name: 'New Concept English collection',
         description: '',
-        difficulty: '包含后面所有的内容',
+        difficulty: 'Includes all items below',
         link: 'https://pan.quark.cn/s/6b12da160020',
       },
       {
         type: 'list',
         children: [
           {
-            name: '新概念英青少年版',
-            description: '儿童读物',
-            difficulty: '7岁至14岁',
+            name: 'New Concept English for Young Learners',
+            description: 'Reading for children',
+            difficulty: 'Ages 7 to 14',
           },
           {
-            name: '新概念英语第一册',
-            description: '适合英语初学者',
-            difficulty: '入门',
+            name: 'New Concept English, Book 1',
+            description: 'For learners starting English.',
+            difficulty: 'Introductory',
           },
           {
-            name: '新概念英语第二册',
-            description: '基础英语学习，巩固语法和词汇',
-            difficulty: '基础',
+            name: 'New Concept English, Book 2',
+            description: 'Build core grammar and vocabulary.',
+            difficulty: 'Elementary',
           },
           {
-            name: '新概念英语第三册',
-            description: '提高英语水平，增强阅读能力',
-            difficulty: '进阶',
+            name: 'New Concept English, Book 3',
+            description: 'Develop English proficiency and reading skills.',
+            difficulty: 'Intermediate',
           },
           {
-            name: '新概念英语第四册',
-            description: '高级英语学习，提升综合能力',
-            difficulty: '高级',
+            name: 'New Concept English, Book 4',
+            description: 'Develop a wider range of advanced English skills.',
+            difficulty: 'Advanced',
           },
         ],
       },
@@ -80,29 +80,29 @@ const categories = ref<Category[]>([
         type: 'list',
         children: [
           {
-            name: '新概念英语1-4 教材高清 PDF',
-            description: '仅 1-4 册的教材高清扫描版 PDF',
+            name: 'New Concept English Books 1–4 (high-resolution PDFs)',
+            description: 'High-resolution textbook scans for Books 1–4.',
             difficulty: 'PDF',
           },
           {
-            name: '新东方新概念1-4册精讲',
-            description: '机构讲解视频',
-            difficulty: '新东方',
+            name: 'New Oriental: New Concept English Books 1–4',
+            description: 'Video lessons from a language school.',
+            difficulty: 'New Oriental',
           },
           {
-            name: '新东方新概念语法精讲',
-            description: '机构讲解视频',
-            difficulty: '新东方',
+            name: 'New Oriental: New Concept English Grammar',
+            description: 'Video lessons from a language school.',
+            difficulty: 'New Oriental',
           },
           {
-            name: '沪江新概念英语全套',
-            description: '机构讲解视频',
-            difficulty: '沪江',
+            name: 'Hujiang: Complete New Concept English',
+            description: 'Video lessons from a language school.',
+            difficulty: 'Hujiang',
           },
           {
-            name: '新概念其他讲解视频',
-            description: '多家机构/个人的讲解视频',
-            difficulty: '其他',
+            name: 'More New Concept English lessons',
+            description: 'Videos from language schools and independent teachers.',
+            difficulty: 'Other',
           },
         ],
       },
@@ -110,71 +110,71 @@ const categories = ref<Category[]>([
   },
   {
     id: 'exam',
-    name: '电视/电影',
-    description: '一些不错的美/英剧，可练听力和口语',
+    name: 'TV and film',
+    description: 'British and American series for listening and speaking practice.',
     resources: [
       {
-        name: '经典美/英剧资源合集',
-        difficulty: '包含后面所有的内容',
+        name: 'British and American TV collection',
+        difficulty: 'Includes all items below',
         link: 'https://v.v8l.cn/s/TG3sgVg',
       },
       {
         type: 'list',
         children: [
           {
-            name: '老友记',
+            name: 'Friends',
             description: '',
-            difficulty: '喜剧 / 爱情',
+            difficulty: 'Comedy / Romance',
           },
           {
-            name: '生活大爆炸',
+            name: 'The Big Bang Theory',
             description: '',
-            difficulty: '喜剧 / 爱情',
+            difficulty: 'Comedy / Romance',
           },
           {
-            name: '是大臣 / 是首相',
+            name: 'Yes Minister / Yes, Prime Minister',
             description: '',
-            difficulty: '喜剧 / 讽刺',
+            difficulty: 'Comedy / Satire',
           },
           {
-            name: '绝命毒师',
+            name: 'Breaking Bad',
             description: '',
-            difficulty: '犯罪 / 剧情',
+            difficulty: 'Crime / Drama',
           },
           {
-            name: '行尸走肉',
+            name: 'The Walking Dead',
             description: '',
-            difficulty: '恐怖 / 惊悚 / 丧尸',
+            difficulty: 'Horror / Thriller / Zombies',
           },
           {
-            name: '越狱',
+            name: 'Prison Break',
             description: '',
-            difficulty: '犯罪 / 剧情',
+            difficulty: 'Crime / Drama',
           },
           {
-            name: '火线',
+            name: 'The Wire',
             description: '',
-            difficulty: '剧情 / 犯罪 / 惊悚',
+            difficulty: 'Drama / Crime / Thriller',
           },
           {
-            name: '纸牌屋',
+            name: 'House of Cards',
             description: '',
-            difficulty: '剧情 / 棋牌馆 / 众议院要人',
+            difficulty: 'Political drama',
           },
           {
-            name: '纸钞屋',
+            name: 'Money Heist',
             description: '',
-            difficulty: '剧情 / 动作 / 悬疑 / 纸房子',
+            difficulty: 'Drama / Action / Mystery',
           },
           {
-            name: '哈利波特',
+            name: 'Harry Potter',
             description: '',
-            difficulty: '奇幻 / 冒险',
+            difficulty: 'Fantasy / Adventure',
           },
           {
-            name: '良医',
+            name: 'The Good Doctor',
             description: '',
-            difficulty: '剧情 / 好医生 / 仁医 ',
+            difficulty: 'Medical drama',
           },
         ],
       },
@@ -182,59 +182,59 @@ const categories = ref<Category[]>([
         type: 'list',
         children: [
           {
-            name: '黑道家族',
+            name: 'The Sopranos',
             description: '',
-            difficulty: '剧情 / 惊悚 / 犯罪',
+            difficulty: 'Drama / Thriller / Crime',
           },
           {
-            name: '风骚律师',
+            name: 'Better Call Saul',
             description: '',
-            difficulty: '剧情 / 喜剧 / 犯罪',
+            difficulty: 'Drama / Comedy / Crime',
           },
           {
-            name: '爱死亡和机器人',
+            name: 'Love, Death & Robots',
             description: '',
-            difficulty: '喜剧 / 科幻 / 动画 / 奇幻',
+            difficulty: 'Comedy / Sci-fi / Animation / Fantasy',
           },
           {
-            name: '毒枭',
+            name: 'Narcos',
             description: '',
-            difficulty: '剧情 / 传记 / 动作 / 犯罪 ',
+            difficulty: 'Drama / Biography / Action / Crime',
           },
           {
-            name: '西部世界',
+            name: 'Westworld',
             description: '',
-            difficulty: '科幻 / 西部',
+            difficulty: 'Sci-fi / Western',
           },
           {
-            name: '破产姐妹',
+            name: '2 Broke Girls',
             description: '',
-            difficulty: '喜剧',
+            difficulty: 'Comedy',
           },
           {
-            name: '实习医生格蕾',
+            name: 'Grey’s Anatomy',
             description: '',
-            difficulty: '剧情 / 爱情',
+            difficulty: 'Drama / Romance',
           },
           {
-            name: '唐顿庄园',
+            name: 'Downton Abbey',
             description: '',
-            difficulty: '剧情',
+            difficulty: 'Drama',
           },
           {
-            name: '破产姐妹',
+            name: '2 Broke Girls',
             description: '',
-            difficulty: '喜剧',
+            difficulty: 'Comedy',
           },
           {
-            name: '王冠',
+            name: 'The Crown',
             description: '',
-            difficulty: '剧情 / 历史 / 王权 ',
+            difficulty: 'Historical drama',
           },
           {
-            name: '经典英文电影大片',
+            name: 'Classic English-language films',
             description: '',
-            difficulty: '电影',
+            difficulty: 'Film',
           },
         ],
       },
@@ -242,26 +242,26 @@ const categories = ref<Category[]>([
   },
   {
     id: 'grammar',
-    name: '语法学习',
+    name: 'Grammar',
     description: '',
     subcategories: [
       {
-        name: '经典教材',
+        name: 'Core textbooks',
         description: '',
         resources: [
           {
             name: '英语语法新思维',
             author: '张满胜',
-            features: '从思维角度讲解语法，注重理解而非死记硬背，分为初级、中级、高级三册，循序渐进',
-            suitable: '希望系统建立语法体系的学习者',
+            features: 'Three books explain how grammar works from beginner to advanced, with an emphasis on understanding.',
+            suitable: 'Learners who want a structured approach to grammar.',
             difficulty: '',
             link: 'https://pan.quark.cn/s/d06abef6c737',
           },
           {
             name: '薄冰英语语法',
             author: '薄冰',
-            features: '老牌经典,体系完整,分类非常细,查语法点方便',
-            suitable: '中学生或基础较弱的学习者',
+            features: 'A comprehensive reference with detailed sections for looking up grammar points.',
+            suitable: 'Secondary students and learners building a foundation.',
             difficulty: '',
             link: 'https://pan.quark.cn/s/30777ceba5b9',
           },
@@ -276,40 +276,40 @@ const categories = ref<Category[]>([
           {
             name: '旋元佑语法',
             author: '旋元佑',
-            features: '以通俗易懂的语言解析复杂语法，强调“理解逻辑”，适合突破语法难点',
-            suitable: '对传统语法教学感到枯燥，想轻松掌握核心逻辑的学习者',
-            difficulty: '繁体中文版',
+            features: 'Explains difficult grammar in plain language and shows the logic behind it.',
+            suitable: 'Learners looking for an accessible explanation of the logic behind grammar.',
+            difficulty: 'Traditional Chinese edition',
             link: 'https://pan.quark.cn/s/0d0de559794e',
           },
         ],
       },
       {
-        name: '进阶提升',
+        name: 'Further study',
         description: '',
         resources: [
           {
-            name: '剑桥英语语法(English Grammar in Use)',
-            author: '剑桥大学出版',
-            features: '分为初级、中级、高级三册，经典畅销语法自学书，解释简明且有大量练习',
-            suitable: '需要结合国际考试的学习者',
+            name: 'English Grammar in Use',
+            author: 'Cambridge University Press',
+            features: 'A self-study series in three levels, with concise explanations and plenty of exercises.',
+            suitable: 'Learners preparing for international exams.',
             description: '',
-            difficulty: '中文版',
+            difficulty: 'Chinese edition',
             link: 'https://pan.quark.cn/s/d4a6ef53c04d',
           },
           {
-            name: 'Oxford English Grammar(牛津英语语法)',
+            name: 'Oxford English Grammar',
             author: 'Sidney Greenbaum & Gerald Nelson',
-            features: '分为基础、提升、高级三册，英式语法权威，解释清晰、例句地道，适合备考雅思/托福',
-            suitable: '想全面系统梳理语法体系的人',
-            difficulty: '英文版',
+            features: 'Three levels of British English grammar with clear explanations and natural examples for IELTS and TOEFL preparation.',
+            suitable: 'Learners who want a comprehensive grammar review.',
+            difficulty: 'English edition',
             link: 'https://pan.quark.cn/s/ca505875e68c',
           },
           {
-            name: '实用英语用法(Practical English Usage)',
+            name: 'Practical English Usage',
             author: 'Michael Swan',
-            features: '解释非常细致，尤其适合纠正常见错误和困惑',
-            suitable: '中高级学习者，适合作为语法问题的工具书',
-            difficulty: '中文版/英文版',
+            features: 'Detailed explanations of common mistakes and points of confusion.',
+            suitable: 'A grammar reference for intermediate and advanced learners.',
+            difficulty: 'Chinese and English editions',
             link: 'https://pan.quark.cn/s/05006e705a77',
           },
         ],
@@ -318,31 +318,31 @@ const categories = ref<Category[]>([
   },
   {
     id: 'listening',
-    name: '听力训练',
-    description: '提升英语听力水平',
+    name: 'Listening practice',
+    description: 'Develop your English listening skills.',
     resources: [
       {
-        name: 'VOA慢速英语合集',
-        description: '新闻类听力材料，语速适中，内容丰富',
-        difficulty: '初级',
+        name: 'VOA Learning English collection',
+        description: 'News recordings at an accessible pace across a range of topics.',
+        difficulty: 'Beginner',
         link: 'https://pan.quark.cn/s/681794bffc6e',
       },
       // {
       //   name: 'BBC Learning English',
       //   description: 'BBC官方英语学习资源，涵盖多方面内容',
-      //   difficulty: '中高级',
+      //   difficulty: 'Intermediate to advanced',
       //   link: 'https://pan.baidu.com/s/xxx',
       // },
       {
-        name: 'TED-ED 科普动画',
-        description: 'TED-Ed 是一个专为初高中生所设计的在3到5分钟长的科普动画課程',
-        difficulty: '初级',
+        name: 'TED-Ed animated lessons',
+        description: 'Short educational animations for middle and high school students.',
+        difficulty: 'Beginner',
         link: 'https://pan.quark.cn/s/d3d83038afb9',
       },
       {
-        name: '哈弗演讲',
-        description: '高质量演讲，锻炼听力同时开拓视野',
-        difficulty: '中高级',
+        name: 'Harvard talks',
+        description: 'Talks that build listening skills and introduce new topics.',
+        difficulty: 'Intermediate to advanced',
         link: 'https://pan.quark.cn/s/62e8d536a34f',
       },
     ],
@@ -397,7 +397,7 @@ async function openLink(url: string, name?: string) {
       <div class="text-center mb-8">
         <h1 class="text-4xl font-bold mb-4">{{ $t('resource_sharing') }}</h1>
         <p class="text-lg text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-          以下是整理的一些英语学习资源，希望对大家有所帮助！
+          Explore this collection of resources for learning English.
         </p>
       </div>
 
@@ -466,18 +466,18 @@ async function openLink(url: string, name?: string) {
       <!-- 页面底部 -->
       <div class="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700">
         <div class="card-white">
-          <div class="text-xl font-bold mb-4">温馨提示</div>
+          <div class="text-xl font-bold mb-4">About these resources</div>
           <ul class="space-y-2 text-gray-600 dark:text-gray-300">
-            <li>所有资源均来自互联网收集，仅供学习交流使用</li>
+            <li>These resources are collected from the web and are shared for learning and discussion.</li>
             <li>
-              如果链接失效，请及时<a :href="`https://v.wjx.cn/vm/ev0W7fv.aspx#`" target="_blank">告知</a>，我会尽快更新
+              If a link stops working, <a :href="`https://v.wjx.cn/vm/ev0W7fv.aspx#`" target="_blank">report it</a> so it can be updated.
             </li>
           </ul>
         </div>
       </div>
     </div>
 
-    <Dialog v-model="showQrDialog" title="手机扫码访问资源">
+    <Dialog v-model="showQrDialog" title="Scan to open this resource">
       <div class="w-90 p-6 pt-0 flex flex-col items-center">
         <p class="text-center text-gray-600 text-xl dark:text-gray-300">
           {{ currentResourceName }}
@@ -485,7 +485,7 @@ async function openLink(url: string, name?: string) {
         <div class="text-center">
           <img v-if="qrDataUrl" :src="qrDataUrl" alt="QR Code" class="w-70 rounded-lg shadow-md" />
         </div>
-        <p class="text-center text-gray-600 text-xl font-bold dark:text-gray-300">请在手机上打开夸克 App 扫码访问</p>
+        <p class="text-center text-gray-600 text-xl font-bold dark:text-gray-300">Open Quark on your phone and scan the code.</p>
       </div>
     </Dialog>
   </BasePage>

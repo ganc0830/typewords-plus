@@ -18,6 +18,7 @@ export interface ModalProps {
   cancelButtonText?: string
   keyboard?: boolean
   closeOnClickBg?: boolean
+  fitViewport?: boolean
   onConfirm?: any
   beforeClose?: any
   t?: any
@@ -101,7 +102,8 @@ watch(
 )
 
 onMounted(() => {
-  if (props.modelValue === undefined) {
+  // 异步加载完成时外层可能已打开弹窗，需要接住首次传入的 true。
+  if (props.modelValue !== false && !visible) {
     visible = true
     id = Date.now()
     modalStack.push({ id, close })
@@ -157,7 +159,7 @@ async function cancel() {
   <Teleport to="body">
     <div class="modal-root" :style="{ 'z-index': zIndex }" v-if="visible">
       <div class="modal-mask" ref="maskRef" v-if="!fullScreen" @click.stop="closeOnClickBg && close()"></div>
-      <div class="modal" ref="modalRef" :class="[fullScreen ? 'full' : 'window', content && ' w-84']">
+      <div class="modal" ref="modalRef" :class="[fullScreen ? 'full' : 'window', content && ' w-84', fitViewport && 'viewport-fit']">
         <Tooltip :title="localeT('close')">
           <IconFluentDismiss20Regular @click="close" v-if="showClose" class="close cursor-pointer" width="24" />
         </Tooltip>
@@ -274,6 +276,52 @@ $time: 0.3s;
 
     .modal-footer {
       @apply flex justify-between p-5;
+    }
+
+    &.viewport-fit {
+      max-width: calc(100% - 24px);
+      max-height: calc(100vh - 24px);
+      max-height: calc(100dvh - 24px);
+
+      .modal-header {
+        flex-shrink: 0;
+        padding-right: 3.5rem;
+        overflow-wrap: anywhere;
+      }
+
+      .modal-body {
+        min-height: 0;
+        display: block;
+        overflow: auto;
+        overscroll-behavior: contain;
+      }
+
+      .modal-footer {
+        flex-shrink: 0;
+        gap: 0.5rem;
+      }
+
+      @media (max-width: 480px) {
+        .modal-body.padding,
+        .modal-footer {
+          padding-inline: 1rem;
+        }
+
+        .modal-footer .right {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          gap: 0.5rem;
+          min-width: 0;
+
+          :deep(.base-button) {
+            height: auto;
+            min-height: 2.75rem;
+            margin-left: 0;
+            white-space: normal;
+          }
+        }
+      }
     }
   }
 }

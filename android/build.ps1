@@ -8,8 +8,9 @@ $sdk = Join-Path $tools 'sdk'
 $platform = Join-Path $sdk 'platforms/android-35/android.jar'
 $buildTools = Join-Path $sdk 'build-tools/35.0.0'
 $env:JAVA_HOME = $jdk
-# aapt2 的 Windows 文件入口不支持本项目中文路径，暂存到固定 D 盘 ASCII 构建目录。
-$work = $env:TYPEWORDS_ANDROID_WORK ?? 'D:/codex-review-temp/typewords-android-build'
+# aapt2 的 Windows 文件入口不支持中文路径；每次用新的 ASCII 子目录，避免打入旧资源。
+$workRoot = $env:TYPEWORDS_ANDROID_WORK ?? 'D:/codex-review-temp/typewords-android-build'
+$work = Join-Path $workRoot ([guid]::NewGuid().ToString('N'))
 $assets = Join-Path $work 'assets'
 $classes = Join-Path $work 'classes'
 $dist = Join-Path $PSScriptRoot 'dist'
@@ -33,7 +34,7 @@ try {
   if (!$html) { Write-Error '无法生成 Android 页面'; exit 1 }
   [IO.File]::WriteAllText((Join-Path $assets 'public/index.html'), $html.Content, [Text.UTF8Encoding]::new($false))
 } finally { if (!$server.HasExited) { Stop-Process -Id $server.Id } }
-& (Join-Path $jdk 'bin/javac.exe') -encoding UTF-8 -source 8 -target 8 -classpath $platform -d $classes (Join-Path $PSScriptRoot 'src/cc/typewords/offline/MainActivity.java')
+& (Join-Path $jdk 'bin/javac.exe') -encoding UTF-8 -source 8 -target 8 -classpath $platform -d $classes (Join-Path $PSScriptRoot 'src/cc/typewords/offline/MainActivity.java') (Join-Path $PSScriptRoot 'src/cc/typewords/offline/BookBrowserActivity.java')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & (Join-Path $jdk 'bin/jar.exe') cf (Join-Path $work 'classes.jar') -C $classes .
 & (Join-Path $buildTools 'd8.bat') --lib $platform --min-api 26 --output $work (Join-Path $work 'classes.jar')
@@ -58,4 +59,13 @@ $apk = Join-Path $dist 'TypeWords-Android.apk'
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & (Join-Path $buildTools 'apksigner.bat') verify --verbose $apk
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-Get-Item -LiteralPath $apk | Select-Object FullName,Length
+$file = Get-Item -LiteralPath $apk
+[xml]$manifest = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'AndroidManifest.xml')
+$androidNamespace = 'http://schemas.android.com/apk/res/android'
+@{
+  versionCode = [int]$manifest.DocumentElement.GetAttribute('versionCode', $androidNamespace)
+  versionName = $manifest.DocumentElement.GetAttribute('versionName', $androidNamespace)
+  size = $file.Length
+  sha256 = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $dist 'TypeWords-Android.json') -Encoding utf8NoBOM
+$file | Select-Object FullName,Length

@@ -57,7 +57,7 @@ async function init() {
   }
   dict = d
   if (!dict.words.length) {
-    return Toast.warning('没有单词可测试！')
+    return Toast.warning('There are no words to test.')
   }
   if (runtimeStore.routeData.taskWords) {
     let currentStudy: TaskWords = runtimeStore.routeData.taskWords
@@ -75,7 +75,7 @@ async function init() {
 
   if (settingStore.wordSound) playCurrentWord(false)
 
-  Toast.info('按快捷键进行选择,例如按快捷键[' + aShortcutKey + ']选择A', { duration: 3000 })
+  Toast.info(`Use the keyboard shortcuts to answer. Press ${aShortcutKey} to choose A.`, { duration: 3000 })
 }
 
 let submitted = $ref(false)
@@ -151,7 +151,7 @@ onUnmounted(closeWordCollectPicker)
   <BasePage>
     <div class="card flex flex-col text-xl">
       <div class="flex items-center justify-between">
-        <div class="page-title">测试：{{ dict?.name }}</div>
+        <div class="page-title">Test · {{ dict?.name }}</div>
         <div class="text-base">{{ index + 1 }} / {{ testWords.length }}</div>
       </div>
       <div class="line my-2"></div>
@@ -160,7 +160,7 @@ onUnmounted(closeWordCollectPicker)
         <div v-if="currentWord" class="text-4xl en-article-family flex flex-wrap items-center gap-2">
           <span>{{ currentWord.word }}</span>
           <VolumeIcon
-            :title="`发音(${settingStore.shortcutKeyMap[ShortcutKey.PlayWordPronunciation]})`"
+            :title="`Play pronunciation (${settingStore.shortcutKeyMap[ShortcutKey.PlayWordPronunciation]})`"
             :cb="playCurrentWord"
           />
           <BaseIcon
@@ -197,7 +197,7 @@ onUnmounted(closeWordCollectPicker)
               @click.stop="submitted && playWordAudio(opt.word.word)"
             >
               <span>{{ opt.word.word }}</span>
-              <VolumeIcon v-if="submitted" :title="'发音'" :cb="() => playWordAudio(opt.word.word)" />
+              <VolumeIcon v-if="submitted" title="Play pronunciation" :cb="() => playWordAudio(opt.word.word)" />
               <template v-if="submitted">
                 <BaseIcon
                   :title="isWordCollect(opt.word) ? $t('uncollect') : $t('collect')"
@@ -215,8 +215,8 @@ onUnmounted(closeWordCollectPicker)
         </div>
 
         <div class="mt-6 flex">
-          <BaseButton type="primary" @click="next">继续测试[{{ nextShortcutKey }}]</BaseButton>
-          <BaseButton type="info" @click="end">结束</BaseButton>
+          <BaseButton type="primary" @click="next">Next question [{{ nextShortcutKey }}]</BaseButton>
+          <BaseButton type="info" @click="end">End test</BaseButton>
         </div>
       </div>
     </div>

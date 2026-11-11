@@ -69,6 +69,32 @@ Windows 本机已验证七种词书格式的解析，并通过 Edge 验证了新
 
 电脑页面提供小说书架、章节目录、翻页和阅读位置保存。安卓应用支持下载电脑词书和文章后离线学习。连接电脑后可以手动上传新增单词和学习进度，并逐项解决进度冲突。
 
-在电脑端设置 `TYPEWORDS_MOBILE_DATA` 为独立的数据目录，令服务监听局域网接口及端口 5567。手机和电脑接入同一局域网，在电脑的「同步」页面查看地址和配对码。词库和同步数据保存在各自的设备上。
+需要手机同步时，用以下配置启动已构建的电脑服务。手机和电脑接入同一局域网，在电脑的同步页面查看当前地址和配对码。词库和同步数据保存在各自的设备上。
+
+```powershell
+$env:TYPEWORDS_MOBILE_DATA = 'D:/TypeWordsData/mobile-data'
+$env:NITRO_HOST = '0.0.0.0'
+$env:NITRO_PORT = '5567'
+node start.mjs
+```
 
 在 Windows 上先运行现有 Nuxt 生产构建。准备 JDK 21、Android SDK Platform 35 和 Build Tools 35.0.0，将 `TYPEWORDS_ANDROID_TOOLS` 指向包含 `jdk` 和 `sdk` 子目录的工具目录，运行 `pwsh -File android/build.ps1`。可通过 `TYPEWORDS_ANDROID_WORK` 指定仅用于打包的 ASCII 路径。生成的 APK 位于 `android/dist`，后续版本需沿用本机签名密钥。
+
+### Android 1.4：流畅筛词与应用内更新
+
+从 [GitHub Releases](https://github.com/ganc0830/typewords-plus/releases) 下载签名 APK。1.4（versionCode 5）采用英文界面，保留离线词书、文章和小说阅读，以及手动上传进度。整本筛词无需输入，支持下一词、跳过并标为已掌握、收藏及原有快捷键。
+
+筛词期间只保存进度和发生变化的词单，暂停整份书库的深层监听；退出词书时统一保存主记录和逐书备份。刷新会恢复待合并的记录，保存失败时回滚本次动作，旧版本保存不能覆盖较新的日志。本机隔离 Edge 对同一份 24,035 词词书测试，九次操作平均约 29 ms；该结果不代表手机实测性能。
+
+手机和电脑连接同一局域网，在 **Device sync** 中配置电脑当前地址和配对码。电脑发布新版后，冷启动应用或在菜单点击 **Check for updates → Download update**，下载后按 Android 系统提示覆盖安装。保持原包名和签名，不要卸载旧版；更新保留固定的 WebView 存储来源。此更新流程需要电脑服务在线，手机安装和设备性能仍需真机确认。
+
+维护者提高 `android/AndroidManifest.xml` 的版本码后，沿用原工具目录中的签名密钥重新构建，并运行：
+
+```powershell
+$env:TYPEWORDS_MOBILE_DATA = 'D:/TypeWordsData/mobile-data'
+pwsh -File android/publish-update.ps1
+```
+
+电脑服务须使用同一个 `TYPEWORDS_MOBILE_DATA`；更新接口从该目录读取清单，发布时不必重启服务。下载中的旧版本继续保留。打包使用新的 ASCII 暂存子目录，避免夹带上次构建的资源。公开 APK 仅包含公共资源；个人词书和小说通过配对同步保存在设备中，签名私钥、配对码和学习数据不随源码发布。
+
+仓库提供 `TypeWords.sln`（Web 与 Android）和 `android/TypeWords.Android.sln`。设置 `TYPEWORDS_ANDROID_TOOLS` 后可执行 `dotnet msbuild TypeWords.sln /p:Configuration=Release` 构建；单独 Android 解决方案使用已生成的前端输出。

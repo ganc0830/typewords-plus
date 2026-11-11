@@ -99,7 +99,7 @@ function previewTtsVoice(voice: SpeechVoice) {
     <SettingItem v-if="showSpeedSubsInSections" :title="$t('sentence_speed')">
       <Slider v-model="settingStore.sentenceSoundSpeed" :step="0.1" :min="0.5" :max="3" showText showValue />
     </SettingItem>
-    <SettingItem title="全局发音声色" desc="用于单词、例句和文章朗读。右侧扬声器可试听。">
+    <SettingItem title="Pronunciation voice" desc="Applies to words, examples, and reading aloud. Tap the speaker to preview.">
       <Select v-model="voice" class="w-82!">
         <Option v-for="(item, id) in speechVoices" :key="id" :label="item.name" :value="id">
           <div class="flex justify-between items-center w-full">

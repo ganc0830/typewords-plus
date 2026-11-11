@@ -76,13 +76,13 @@ onBeforeUnmount(() => { observer?.disconnect(); remember() })
 <template>
   <main class="reader" :class="{ night: dark }">
     <header>
-      <NuxtLink to="/library">返回书架</NuxtLink>
-      <button @click="contents = !contents">目录</button>
+      <NuxtLink to="/library">Bookshelf</NuxtLink>
+      <button @click="contents = !contents">Contents</button>
       <button :disabled="size <= 16" @click="size -= 2">A−</button>
       <button :disabled="size >= 36" @click="size += 2">A＋</button>
-      <button @click="dark = !dark">{{ dark ? '日间' : '夜间' }}</button>
+      <button @click="dark = !dark">{{ dark ? 'Light' : 'Dark' }}</button>
     </header>
-    <h1>{{ article?.title || book?.name || '正在打开书籍…' }}</h1>
+    <h1>{{ article?.title || book?.name || 'Opening book…' }}</h1>
     <nav v-if="contents" class="contents">
       <button v-for="(item, index) in book?.articles || []" :key="item.id || index" @click="selectChapter(index)">{{ index + 1 }}. {{ item.title }}</button>
     </nav>
@@ -92,9 +92,9 @@ onBeforeUnmount(() => { observer?.disconnect(); remember() })
       </article>
     </div>
     <footer>
-      <button :disabled="chapter === 0 && page === 0" @click="turn(-1)">上一页</button>
-      <span>第 {{ chapter + 1 }} 章 · {{ page + 1 }}/{{ pages }} 页</span>
-      <button :disabled="chapter + 1 >= (book?.articles?.length || 0) && page + 1 >= pages" @click="turn(1)">下一页</button>
+      <button :disabled="chapter === 0 && page === 0" @click="turn(-1)">Previous</button>
+      <span>Chapter {{ chapter + 1 }} · {{ page + 1 }}/{{ pages }}</span>
+      <button :disabled="chapter + 1 >= (book?.articles?.length || 0) && page + 1 >= pages" @click="turn(1)">Next</button>
     </footer>
   </main>
 </template>

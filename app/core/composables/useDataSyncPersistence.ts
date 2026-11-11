@@ -31,8 +31,9 @@ import { type BaseState, getDefaultBaseState, getDefaultSettingState, useBaseSto
 import type { BackupData, SaveData, Snapshot } from '../types/types.ts'
 import { SyncDataType, CompareResult, DictType } from '../types/enum'
 import { Supabase } from '../utils/supabase'
-import { del, delMany, get, keys, set, setMany } from 'idb-keyval'
+import { createStore, del, delMany, get, keys, set, setMany } from 'idb-keyval'
 import { WORD_BOOK_PROGRESS_PREFIX, wordBookProgressEntries } from '../utils/word-book-progress'
+import { getScreeningRevision, markScreeningSaved, SCREENING_JOURNAL_KEY, waitForScreeningWrites } from '../utils/screening-journal'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Toast } from '@/base'
 
@@ -56,7 +57,10 @@ type SaveLocalAndSyncOptions = {
   pullWhenRemoteNewer?: boolean
   pushWhenLocalNewer?: boolean
   canSyncRemote?: boolean
+  screeningRevision?: string
 }
+
+const dictStore = createStore('keyval-store', 'keyval')
 
 const DICT_SYNC_BLOCK_REASON = '检测到自定义文章里面有自定义音频，无法使用同步功能'
 
@@ -105,7 +109,7 @@ async function getLocalPersistMeta(type: SyncDataType): Promise<LocalPersistMeta
   }
 }
 
-async function persistLocalState(type: SyncDataType, val: unknown, updated_at?: string): Promise<void> {
+async function persistLocalState(type: SyncDataType, val: unknown, updated_at?: string, screeningRevision?: string): Promise<void> {
   // console.log('persistLocalState',type,updated_at)
   if (type === SyncDataType.practice_word) {
     await setPracticeWordCacheLocal(val as PracticeWordCacheStored, updated_at)
@@ -119,7 +123,36 @@ async function persistLocalState(type: SyncDataType, val: unknown, updated_at?: 
   if (type === SyncDataType.dict) {
     const books = (val as BaseState)?.word?.bookList ?? []
     // 进度副本和主记录在同一事务内提交，避免刷新时只写入其中之一。
-    await setMany([[getPersistKey(type), value], ...wordBookProgressEntries(books, updated_at ?? new Date().toISOString())])
+    const entries: [IDBValidKey, string][] = [[getPersistKey(type), value], ...wordBookProgressEntries(books, updated_at ?? new Date().toISOString())]
+    if (!screeningRevision) {
+      await setMany(entries)
+      return
+    }
+    // 比较版本、写主记录和副本、清理已整合日志均在同一事务，旧保存不可删除新日志。
+    await dictStore('readwrite', records => new Promise<void>((resolve, reject) => {
+      const transaction = records.transaction
+      let stale = false
+      transaction.oncomplete = () => { markScreeningSaved(screeningRevision); resolve() }
+      transaction.onerror = transaction.onabort = () => reject(stale
+        ? new Error('Screening changed before saving. Reload and try again.')
+        : transaction.error)
+      const pending = records.get(SCREENING_JOURNAL_KEY)
+      pending.onsuccess = () => {
+        // 日志已更新或被另一个保存消费时，旧主库也不可写入。
+        if (pending.result?.revision !== screeningRevision) {
+          stale = true
+          transaction.abort()
+          return
+        }
+        try {
+          for (const [key, entry] of entries) records.put(entry, key)
+          records.delete(SCREENING_JOURNAL_KEY)
+        } catch (error) {
+          transaction.abort()
+          reject(error)
+        }
+      }
+    }))
   } else {
     await set(getPersistKey(type), value)
   }
@@ -263,18 +296,12 @@ async function applyRemoteDataByType(
   await persistLocalState(type, row.data, row.updated_at ?? now)
 }
 
+/** 只读检查 state 的自定义音频，返回阻止远端同步的原因，不复制整库正文。 */
 function getDictSyncBlockReason(state: BaseState): string | null {
-  const data = shakeCommonDict(state)
-  const bookList = data.article.bookList.filter(v => v.custom || v.system)
-  const audioFileIdList: string[] = []
-  bookList.forEach(v => {
-    v.articles
-      .filter(s => !s.audioSrc && s.audioFileId)
-      .forEach(a => {
-        audioFileIdList.push(a.audioFileId)
-      })
-  })
-  return audioFileIdList.length ? DICT_SYNC_BLOCK_REASON : null
+  const hasLocalAudio = state.article.bookList.some(book =>
+    (book.custom || book.system) && book.articles.some(article => !article.audioSrc && article.audioFileId)
+  )
+  return hasLocalAudio ? DICT_SYNC_BLOCK_REASON : null
 }
 
 type HashBackupIndexItem = {
@@ -421,14 +448,14 @@ export function useDataSyncPersistence() {
 
   async function saveLocalAndSync(type: SyncDataType, data: unknown, options?: SaveLocalAndSyncOptions) {
     try {
-      //先取出本地数据的meta值，以用后续与云端数据比较
-      const localMeta = await getLocalPersistMeta(type)
+      const canSyncRemote = options?.canSyncRemote !== false && !!getSyncClient(options?.client)
+      // 仅同步时读取写入前的 meta；离线保存无需读取和解析上一份完整词库。
+      const localMeta = canSyncRemote ? await getLocalPersistMeta(type) : null
       // console.log('saveLocalAndSync-localMeta', localMeta)
       //先保存，再同步
       const updated_at = new Date().toISOString()
-      await persistLocalState(type, data, updated_at)
+      await persistLocalState(type, data, updated_at, options?.screeningRevision)
 
-      const canSyncRemote = options?.canSyncRemote !== false
       if (!canSyncRemote) return
       const remoteMetas = await fetchServerMeta([type], options?.client)
       if (!remoteMetas) return
@@ -571,8 +598,10 @@ export function useDataSyncPersistence() {
   }
 
   async function saveDictState(state: BaseState = store.$state, options?: SaveLocalAndSyncOptions) {
+    // 必须在同步复制 state 之前捕获版本，不能用等待期间写入的新日志版本清理旧快照。
+    const screeningRevision = getScreeningRevision()
     const { data, canSyncRemote } = await prepareDictState(state)
-    await saveLocalAndSync(SyncDataType.dict, data, { ...options, canSyncRemote: canSyncRemote && options?.canSyncRemote !== false })
+    await saveLocalAndSync(SyncDataType.dict, data, { ...options, screeningRevision, canSyncRemote: canSyncRemote && options?.canSyncRemote !== false })
   }
 
   async function getLocalCompactDataByType(type: SyncDataType) {
@@ -583,7 +612,11 @@ export function useDataSyncPersistence() {
   }
 
   async function clear() {
-    await delMany((await keys()).filter(key => typeof key === 'string' && key.startsWith(WORD_BOOK_PROGRESS_PREFIX)))
+    await waitForScreeningWrites()
+    const screeningRevision = getScreeningRevision()
+    // 显式清空数据也删除尚未整合的筛词日志，避免刷新后恢复旧词。
+    await delMany([SCREENING_JOURNAL_KEY, ...(await keys()).filter(key => typeof key === 'string' && key.startsWith(WORD_BOOK_PROGRESS_PREFIX))])
+    if (screeningRevision) markScreeningSaved(screeningRevision)
     let d = getDefaultBaseState()
     d.load = true
     let d1 = getDefaultSettingState()

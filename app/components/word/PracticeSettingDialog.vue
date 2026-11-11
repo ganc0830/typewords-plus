@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { _getAccomplishDays } from '@/core/utils'
-import { BaseButton, InputNumber, Slider, Tooltip, Toast } from '@/base'
-import { defineAsyncComponent, watch } from 'vue'
+import { BaseButton, BaseInput, InputNumber, Slider, Tooltip, Toast } from '@/base'
+import { computed, defineAsyncComponent, watch } from 'vue'
 import { useSettingStore } from '@/core/stores/setting'
 import ChangeLastPracticeIndexDialog from './ChangeLastPracticeIndexDialog.vue'
 import { useRuntimeStore } from '@/core/stores/runtime'
-import { BaseInput } from '@/base'
 
 const Dialog = defineAsyncComponent(() => import('@/base/dialog/Dialog.vue'))
 
@@ -27,6 +26,8 @@ let show = $ref(false)
 let tempPerDayStudyNumber = $ref(0)
 let tempWordReviewRatio = $ref(0)
 let tempLastLearnIndex = $ref(0)
+// 词书仅保留目录元数据时，仍以已知总数限制学习位置。
+const wordCount = computed(() => runtimeStore.editDict.words.length || runtimeStore.editDict.length)
 
 async function changePerDayStudyNumber() {
   runtimeStore.editDict.perDayStudyNumber = Number(tempPerDayStudyNumber)
@@ -42,13 +43,14 @@ watch(
       if (runtimeStore.editDict.id) {
         tempPerDayStudyNumber = runtimeStore.editDict.perDayStudyNumber
         tempLastLearnIndex = runtimeStore.editDict.lastLearnIndex
-        if (tempLastLearnIndex >= runtimeStore.editDict.length) tempLastLearnIndex = runtimeStore.editDict.length
+        if (tempLastLearnIndex >= wordCount.value) tempLastLearnIndex = wordCount.value
         tempWordReviewRatio = settings.wordReviewRatio
       } else {
         Toast.warning($t('please_select_dict'))
       }
     }
-  }
+  },
+  { immediate: true }
 )
 </script>
 
@@ -57,77 +59,49 @@ watch(
     v-model="model"
     :title="$t('learning_settings')"
     padding
+    fit-viewport
     :footer="true"
     :onConfirm="changePerDayStudyNumber"
     @ok="emit('ok')"
   >
     <div class="target-modal color-main" id="mode">
-      <div class="text-center mt-4">
-        <span
-          >{{ $t('total') }}<span class="target-number mx-2">{{ runtimeStore.editDict.length }}</span
-          >{{ $t('words_count') }}，</span
-        >
-        <span
-          >{{ $t('estimated')
-          }}<span class="target-number mx-2">{{
-            _getAccomplishDays(runtimeStore.editDict.length - tempLastLearnIndex, tempPerDayStudyNumber)
-          }}</span
-          >{{ $t('days_to_complete') }}</span
-        >
+      <div class="study-settings-summary">
+        <span>{{ $t('total') }} <strong>{{ wordCount }}</strong> {{ $t('words_count') }}</span>
+        <span>{{ $t('estimated') }} <strong>{{ _getAccomplishDays(wordCount - tempLastLearnIndex, tempPerDayStudyNumber) }}</strong> {{ $t('days_to_complete') }}</span>
       </div>
 
-      <div class="text-center mt-4 mb-8 flex gap-1 items-end justify-center">
-        <span>{{ $t('from_word') }}</span>
-        <div class="w-20">
-          <BaseInput class="target-number" v-model="tempLastLearnIndex" />
+      <div class="study-settings-field">
+        <div class="study-settings-label">
+          <span>{{ $t('learning_progress') }}</span>
+          <BaseInput v-model="tempLastLearnIndex" class="study-settings-number" inputmode="numeric" :aria-label="$t('learning_progress')" />
         </div>
-        <span>{{ $t('start_daily') }}</span>
-        <div class="w-16">
-          <BaseInput class="target-number" v-model="tempPerDayStudyNumber" />
-        </div>
-        <span>{{ $t('new_words_count2') }}</span>
-        <span>，最多复习</span>
-        <div class="target-number mx-2">
-          {{ tempPerDayStudyNumber * tempWordReviewRatio || '-' }}
-        </div>
-        <span>{{ $t('words') }}</span>
+        <Slider :min="0" :max="wordCount" show-text v-model="tempLastLearnIndex" />
+        <BaseButton type="info" class="study-settings-picker" @click="show = true">{{ $t('select_from_dict') }}</BaseButton>
       </div>
 
-      <div class="mb-4 space-y-2">
-        <div class="flex items-center gap-space">
+      <div class="study-settings-field">
+        <div class="study-settings-label">
+          <span>{{ $t('daily_learning') }}</span>
+          <BaseInput v-model="tempPerDayStudyNumber" class="study-settings-number" inputmode="numeric" :aria-label="$t('daily_learning')" />
+        </div>
+        <Slider :min="1" :max="500" show-text v-model="tempPerDayStudyNumber" />
+      </div>
+
+      <div class="study-settings-field">
+        <div class="study-settings-label">
           <Tooltip :title="$t('review_ratio_tooltip')">
-            <div class="flex items-center gap-1 w-20 break-keep">
+            <div class="study-settings-review">
               <span>{{ $t('review_ratio') }}</span>
               <IconFluentQuestionCircle20Regular />
             </div>
           </Tooltip>
           <InputNumber :min="0" :max="10" v-model="tempWordReviewRatio" />
         </div>
-        <div class="flex" v-if="!tempWordReviewRatio">
-          <div class="w-23 flex-shrink-0"></div>
-          <div class="text-sm text-gray-500">
-            <div>{{ $t('review_ratio_notice_1') }}</div>
-            <div>{{ $t('review_ratio_notice_2') }}</div>
-          </div>
+        <div class="study-settings-note" v-if="!tempWordReviewRatio">
+          <p>{{ $t('review_ratio_notice_1') }}</p>
+          <p>{{ $t('review_ratio_notice_2') }}</p>
         </div>
-      </div>
-
-      <div class="flex mb-4 gap-space">
-        <span class="shrink-0 w-20">{{ $t('daily_learning') }}</span>
-        <Slider show-text class="mt-1" :min="1" :max="500" v-model="tempPerDayStudyNumber" />
-      </div>
-      <div class="flex gap-space">
-        <span class="shrink-0 w-20">{{ $t('learning_progress') }}</span>
-        <div class="flex-1">
-          <Slider
-            :min="0"
-            show-text
-            class="my-1"
-            :max="runtimeStore.editDict.words.length"
-            v-model="tempLastLearnIndex"
-          />
-          <BaseButton @click="show = true">{{ $t('select_from_dict') }}</BaseButton>
-        </div>
+        <p v-else class="study-settings-note">Up to {{ tempPerDayStudyNumber * tempWordReviewRatio }} review words per day</p>
       </div>
     </div>
   </Dialog>
@@ -144,91 +118,78 @@ watch(
 
 <style scoped lang="scss">
 .target-modal {
+  box-sizing: border-box;
   width: 35rem;
+  max-width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+  padding-block: 1rem 0.25rem;
+}
 
-  .mode-item {
-    @apply w-50% border border-blue border-solid p-2 rounded-lg cursor-pointer;
-  }
+.study-settings-summary,
+.study-settings-note {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-sub-text);
+  overflow-wrap: anywhere;
+}
 
-  .active {
-    @apply bg-blue color-white;
+.study-settings-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+}
+
+.study-settings-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+}
+
+.study-settings-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.study-settings-review {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+
+  svg {
+    flex-shrink: 0;
   }
 }
 
+.study-settings-label > .study-settings-number {
+  width: 7rem;
+  max-width: 100%;
+  min-height: 2.75rem;
+  font-variant-numeric: tabular-nums;
 
-@media (max-width: 768px) {
-  .target-modal {
-    width: 90vw !important;
-    max-width: 400px;
-    padding: 0 1rem;
-
-    // 模式选择
-    .center .flex.gap-4 {
-      width: 100%;
-      flex-direction: column;
-      height: auto;
-      gap: 0.8rem;
-
-      .mode-item {
-        width: 100%;
-        padding: 1rem;
-
-        .title {
-          font-size: 1rem;
-        }
-
-        .desc {
-          font-size: 0.85rem;
-          margin-top: 0.5rem;
-        }
-      }
-    }
-
-    // 统计显示
-    .text-center {
-      font-size: 0.9rem;
-
-      .text-3xl {
-        font-size: 1.5rem;
-      }
-    }
-
-    // 滑块控件
-    .flex.mb-4,
-    .flex.mb-6 {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0.5rem;
-
-      span {
-        width: 100%;
-      }
-
-      .flex-1 {
-        width: 100%;
-      }
-    }
-
-    // 按钮
-    .base-button {
-      width: 100%;
-      min-height: 44px;
-    }
+  :deep(input) {
+    min-width: 0;
+    text-align: center;
   }
+}
+
+.study-settings-picker {
+  justify-self: start;
+  max-width: 100%;
+  white-space: normal;
 }
 
 @media (max-width: 480px) {
-  .target-modal {
-    width: 95vw !important;
-    padding: 0 0.5rem;
-
-    .text-center {
-      font-size: 0.8rem;
-
-      .text-3xl {
-        font-size: 1.2rem;
-      }
-    }
+  .study-settings-picker {
+    justify-self: stretch;
+    min-height: 2.75rem;
   }
 }
 </style>

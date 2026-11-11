@@ -35,24 +35,24 @@ const settingStore = useSettingStore()
       <InputNumber :min="0" :max="10" v-model="settingStore.wordReviewRatio" />
     </SettingItem>
 
-    <SettingItem title="无到期词时加入随机复习" desc="开启后，智能学习没有到期复习词时，会从已学单词中随机补充复习词">
+    <SettingItem title="Add random review when no words are due" desc="Select previously learned words at random when no scheduled reviews are due.">
       <Switch v-model="settingStore.autoAddRandomReviewWhenNoDue" />
     </SettingItem>
 
-    <SettingItem title="显示词源和相关词" desc="单词的词源和相关词可能有误，请谨慎使用">
+    <SettingItem title="Show etymology and related words" desc="Etymology and related words may contain inaccuracies.">
       <Switch v-model="settingStore.showEtymologyAndRelWords" />
     </SettingItem>
 
-    <SettingItem title="显示练习引导">
+    <SettingItem title="Show practice tips">
       <Switch v-model="settingStore.showUsageTips" />
     </SettingItem>
 
-    <SettingItem title="总是显示笔记" desc="关闭后，只会在跟写时显示">
+    <SettingItem title="Always show notes" desc="When off, notes appear only while copying a word.">
       <Switch v-model="settingStore.alwaysShowNote" />
     </SettingItem>
 
     <div class="line"></div>
-    <SettingItem :mainTitle="`例句设置`" />
+    <SettingItem :mainTitle="`Example sentences`" />
     <SettingItem :title="$t('practice_sentence')">
       <Switch v-model="settingStore.practiceSentence" />
     </SettingItem>
@@ -78,8 +78,8 @@ const settingStore = useSettingStore()
 
     <SettingItem
       v-else
-      title="空格冷却时间"
-      desc="手动模式下，单词完成后为避免同时按下最后一个字母和空格键时跳过，忽略空格键的时间"
+      title="Spacebar delay"
+      desc="Ignore the spacebar briefly after finishing a word to prevent accidental advances."
     >
       <InputNumber
         v-model="settingStore.spaceCooldownTime"

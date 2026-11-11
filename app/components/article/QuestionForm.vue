@@ -84,7 +84,7 @@ const submitAll = () => {
   const wrongCount = results.length - correctCount
 
   console.log('最终结果：', results)
-  Toast.success(`共 ${results.length} 题，答对 ${correctCount}，答错 ${wrongCount}`)
+  Toast.success(`${results.length} questions: ${correctCount} correct, ${wrongCount} incorrect.`)
 }
 </script>
 

@@ -21,6 +21,7 @@ import {
   _getDictDataByUrl,
   _nextTick,
   debounce,
+  getDictDisplayName,
   getShufflePracticeWords,
   isMobile,
   loadJsLib,
@@ -73,6 +74,7 @@ const runtimeStore = useRuntimeStore()
 let loading = $ref(true)
 let isSaveData = $ref(false)
 let unsupportedCacheVersion = false
+let practiceCacheChecked = false
 
 async function loadPracticeCache() {
   try {
@@ -80,7 +82,7 @@ async function loadPracticeCache() {
   } catch (error) {
     if (!(error instanceof UnsupportedPracticeCacheVersionError)) throw error
     unsupportedCacheVersion = true
-    Toast.error('练习缓存来自更高版本，请升级后再继续')
+    Toast.error('This practice was saved by a newer version. Update to continue.')
     return null
   }
 }
@@ -88,12 +90,12 @@ async function loadPracticeCache() {
 const shouldShowDialogPracticeMode = [WordPracticeMode.Shuffle, WordPracticeMode.ShuffleWordsTest]
 
 useSeoMeta({
-  title: `在线背单词与英语打字练习｜${APP_NAME}`,
-  description: '在电脑上选择 CET-4、CET-6、考研、GRE、IELTS 等词库，通过键盘跟打、拼写和科学间隔复习高效背单词。',
-  ogTitle: `在线背单词与英语打字练习｜${APP_NAME}`,
-  ogDescription: '在电脑上用键盘打字背单词，支持 50+ 词库和科学间隔复习。',
-  twitterTitle: `在线背单词与英语打字练习｜${APP_NAME}`,
-  twitterDescription: '在电脑上用键盘打字背单词，支持 50+ 词库和科学间隔复习。',
+  title: `Vocabulary and Typing Practice | ${APP_NAME}`,
+  description: 'Learn vocabulary with typing, spelling, and spaced repetition across CET, GRE, and IELTS wordbooks.',
+  ogTitle: `Vocabulary and Typing Practice | ${APP_NAME}`,
+  ogDescription: 'Practice English vocabulary with typing and spaced repetition.',
+  twitterTitle: `Vocabulary and Typing Practice | ${APP_NAME}`,
+  twitterDescription: 'Practice English vocabulary with typing and spaced repetition.',
 })
 
 let practiceData = $ref<PracticeWordCache>({
@@ -116,9 +118,9 @@ function toggleAutoAddRandomReview(enabled: boolean) {
   const result = refreshStudyTask()
   if (!enabled) return
   if (result.randomReviewCount > 0) {
-    Toast.success(`已将 ${result.randomReviewCount} 个随机复习词加入本次学习`)
+    Toast.success(`Added ${result.randomReviewCount} random review words.`)
   } else {
-    Toast.warning('暂无单词可以复习，先学习一些新词后再来看看吧')
+    Toast.warning('No words are due. Learn some new words first.')
   }
 }
 
@@ -135,21 +137,21 @@ const reviewWordLimit = $computed(() => {
 const reviewWordTip = $computed(() => {
   const dailyGoal = store.sdict.perDayStudyNumber
   const actualCount = practiceData?.taskWords?.review?.length ?? 0
-  const rule = `复习词来自记忆曲线中今天及以前到期的已学单词，并会排除本组新词、已掌握词和已忽略词。“${effectiveReviewRatio} 倍”只决定数量上限：每日新词目标 ${dailyGoal} × ${effectiveReviewRatio}，本组最多安排 ${reviewWordLimit} 个。\n`
+  const rule = `Review uses words due by today, excluding new, mastered, and ignored words. Your daily goal of ${dailyGoal} × ${effectiveReviewRatio} caps this session at ${reviewWordLimit} words.\n`
 
   if (isSaveData) {
-    return `${rule}当前是已生成的未完成任务，共安排 ${actualCount} 个复习词；\n实际数量取决于任务生成时符合条件的到期词，不会用未到期词补足。`
+    return `${rule}This saved session contains ${actualCount} review words based on what was due when it was created.`
   }
   if (reviewWordLimit === 0) {
-    return `${rule}当前数量上限为 0，因此本组不安排复习词。`
+    return `${rule}The review limit is zero.`
   }
   if (dueReviewCount === 0 && actualCount > 0) {
-    return `${rule}当前没有到期复习词，已按“加入随机复习”设置从已学单词中随机加入 ${actualCount} 个。`
+    return `${rule}No words were due, so ${actualCount} previously learned words were selected at random.`
   }
   if (actualCount < reviewWordLimit) {
-    return `${rule}当前只有 ${actualCount} 个符合条件的到期词，因此本组安排 ${actualCount} 个，不会用未到期词补足。`
+    return `${rule}Only ${actualCount} eligible words are due for review.`
   }
-  return `${rule}当前本组安排 ${actualCount} 个，已达到数量上限。`
+  return `${rule}This session contains the maximum of ${actualCount} review words.`
 })
 
 async function resetCacheData() {
@@ -177,14 +179,14 @@ watch(
         })
         tour.addStep({
           id: 'step1',
-          text: '点击这里选择一本词典开始学习',
+          text: 'Choose a wordbook to begin.',
           attachTo: {
             element: '#step1',
             on: 'bottom',
           },
           buttons: [
             {
-              text: `下一步（1/${TourConfig.total}）`,
+              text: `Next (1/${TourConfig.total})`,
               action() {
                 tour.next()
                 router.push('/dict-list')
@@ -246,6 +248,7 @@ async function init() {
 
   if (!practiceData?.taskWords.new.length && store.sdict.words.length) {
     const d = await loadPracticeCache()
+    practiceCacheChecked = true
     if (d) {
       practiceData = d
       isSaveData = true
@@ -256,15 +259,35 @@ async function init() {
   loading = false
 }
 
+// 同步可在当前页面加载完成后替换词书和进度。只重算新任务，保留未完成练习。
+watch([
+  () => store.sdict.id,
+  () => store.sdict.lastLearnIndex,
+  () => store.sdict.perDayStudyNumber,
+  () => store.sdict.complete,
+  () => store.sdict.words,
+  () => store.sdict.words.length,
+  () => store.getIgnoreWordsSet(),
+  () => Object.entries(store.fsrsData).map(([word, card]) => [word, card.due]),
+], debounce(async () => {
+  if (!store.load || loading || runtimeStore.globalLoading || isSaveData || unsupportedCacheVersion) return
+  if (!practiceCacheChecked && store.sdict.words.length) {
+    loading = true
+    try { await init() } finally { loading = false }
+    return
+  }
+  refreshStudyTask()
+}, 200))
+
 async function startPractice(practiceMode: WordPracticeMode, resetCache: boolean = false): Promise<void> {
   if (unsupportedCacheVersion) {
-    Toast.error('当前客户端无法读取这份练习缓存，请升级后再继续')
+    Toast.error('This version cannot read the saved practice. Update to continue.')
     return
   }
   if (practiceMode === WordPracticeMode.Custom) {
     const activeCustomFlowId = getActiveCustomFlowId()
     if (!activeCustomFlowId || !getUserFlow(activeCustomFlowId)) {
-      Toast.warning('请先创建并激活一个自定义流程')
+      Toast.warning('Create and activate a custom flow first.')
       router.push('/practice-flow-editor')
       return
     }
@@ -279,7 +302,7 @@ async function startPractice(practiceMode: WordPracticeMode, resetCache: boolean
 
   if (store.sdict.id) {
     if (!store.sdict.words.length) {
-      Toast.warning('没有单词可学习！')
+      Toast.warning('There are no words to study.')
       return
     }
 
@@ -298,7 +321,7 @@ async function startPractice(practiceMode: WordPracticeMode, resetCache: boolean
     nav(WordPracticeModeUrlMap[practiceMode] + '/' + store.sdict.id, {}, practiceData)
   } else {
     window.umami?.track('no-dict')
-    Toast.warning('请先选择一本词典')
+    Toast.warning('Choose a wordbook first.')
   }
 }
 
@@ -394,7 +417,7 @@ const totalDay = $computed(() => {
 })
 
 const studyDayDialogTitle = $computed(() =>
-  selectedStudyDateKey ? `${dayjs(selectedStudyDateKey).format('YYYY年M月D日')} 学习记录` : ''
+  selectedStudyDateKey ? `${dayjs(selectedStudyDateKey).format('MMM D, YYYY')} study history` : ''
 )
 
 function isStudyDayKeyToday(dateKey: string) {
@@ -438,7 +461,7 @@ function onSelectCalendarDate(dateKey: string) {
       sessionRole,
     })
   }
-  if (!rows.length) return Toast.info('无学习记录')
+  if (!rows.length) return Toast.info('No study records.')
   studyDayRecords = rows
   showStudyDayDialog = true
 }
@@ -501,7 +524,7 @@ async function dropBook(event: DragEvent, id: DictResource['id']) {
   const applied = store.word.bookList
   try {
     await dataSync.saveDictState(store.$state, { canSyncRemote: false })
-    Toast.success('词书顺序已保存')
+    Toast.success('Wordbook order saved.')
   } catch {
     if (store.word.bookList === applied) {
       store.$patch(state => {
@@ -509,7 +532,7 @@ async function dropBook(event: DragEvent, id: DictResource['id']) {
         state.word.studyIndex = studyIndex
       })
     }
-    Toast.warning('词书顺序保存失败，请重试')
+    Toast.warning('Could not save wordbook order. Try again.')
   } finally {
     savingBookOrder = false
   }
@@ -529,7 +552,7 @@ async function handleBatchDel() {
     }
   })
   selectIds = []
-  Toast.success('删除成功！')
+  Toast.success('Deleted.')
 }
 
 function toggleSelect(item) {
@@ -542,13 +565,13 @@ function toggleSelect(item) {
 }
 
 const progressTextLeft = $computed(() => {
-  if (store.sdict.complete) return '已学完，进入总复习阶段'
-  return '当前进度：已学' + store.currentStudyProgress + '%'
+  if (store.sdict.complete) return 'Completed. Ready for review.'
+  return 'Progress: ' + store.currentStudyProgress + '%'
 })
 
 function check(cb: Function) {
   if (!store.sdict.id) {
-    Toast.warning('请先选择一本词典')
+    Toast.warning('Choose a wordbook first.')
   } else {
     runtimeStore.editDict = getDefaultDict(store.sdict)
     cb()
@@ -559,7 +582,7 @@ async function savePracticeSetting() {
   await resetCacheData()
   await store.changeDict(runtimeStore.editDict, true)
   refreshStudyTask()
-  Toast.success('修改成功')
+  Toast.success('Changes saved.')
 }
 
 async function onShufflePracticeSettingOk(setting: ShufflePracticeSetting) {
@@ -595,20 +618,20 @@ async function saveLastPracticeIndex(e) {
   await resetCacheData()
   await store.changeDict(runtimeStore.editDict, true)
   refreshStudyTask()
-  Toast.success('修改成功')
+  Toast.success('Changes saved.')
 }
 
 const { data: recommendDictList, isFetching } = useFetch(resourceWrap(DICT_LIST.WORD.RECOMMENDED)).json()
 
 const systemPracticeText = $computed(() => {
   if (settingStore.wordPracticeMode === WordPracticeMode.Free) {
-    return '开始学习'
+    return 'Start learning'
   } else if (settingStore.wordPracticeMode === WordPracticeMode.Custom) {
-    return isSaveData ? '继续自定义练习' : '开始自定义练习'
+    return isSaveData ? 'Resume custom practice' : 'Start custom practice'
   } else {
     return isSaveData
-      ? '继续' + WordPracticeModeNameMap[settingStore.wordPracticeMode]
-      : '开始' + WordPracticeModeNameMap[settingStore.wordPracticeMode]
+      ? 'Resume ' + WordPracticeModeNameMap[settingStore.wordPracticeMode]
+      : 'Start ' + WordPracticeModeNameMap[settingStore.wordPracticeMode]
   }
 })
 
@@ -625,19 +648,71 @@ onUnmounted(() => {
 <template>
   <BasePage>
     <div class="my-100 text-4xl font-bold text-red" v-if="isOldHost">
-      已启用新域名
+      A new address is available.
       <a class="mr-4" :href="`${Origin}/words?from_old_site=1`">{{ Origin }}</a
-      >当前 2study.top 域名将在 7 月 3 号停止使用
+      >The 2study.top address will be retired on July 3.
     </div>
 
-    <div class="card flex flex-col md:flex-row gap-4">
+    <section v-if="isAndroidApp()" class="android-learning">
+      <header class="android-learning-heading">
+        <h1>Today's study</h1>
+        <button v-if="store.sdict.id" type="button" class="android-text-action" @click="showPracticeWordListDialog = true">Word list</button>
+      </header>
+      <article class="android-learning-card">
+        <div class="android-book-toolbar">
+          <span>Current wordbook</span>
+          <a href="#android-word-books" class="android-text-action">My wordbooks</a>
+        </div>
+        <template v-if="store.sdict.id">
+          <button type="button" class="android-book-name" @click="goDictDetail(store.sdict)">{{ getDictDisplayName(store.sdict) }}</button>
+          <div class="android-progress-label">
+            <strong>{{ store.currentStudyProgress }}<small>%</small></strong>
+            <span>{{ store.sdict.lastLearnIndex }} / {{ store.sdict.length }} words</span>
+          </div>
+          <progress :value="store.currentStudyProgress" max="100" aria-label="Wordbook progress"></progress>
+          <p v-if="store.sdict.complete" class="android-completed">{{ progressTextLeft }}</p>
+          <div class="android-learning-actions">
+            <button type="button" class="android-primary-action" :disabled="loading" @click="systemPractice">{{ systemPracticeText }}</button>
+            <NuxtLink :to="'/practice-screen/' + encodeURIComponent(String(store.sdict.id))" class="android-secondary-action">Screen entire book</NuxtLink>
+          </div>
+        </template>
+        <p v-else class="android-empty-book">Open a wordbook below and tap Learn.</p>
+      </article>
+
+      <div v-if="store.sdict.id" class="android-task-strip">
+        <div><strong>{{ practiceData?.taskWords?.new?.length ?? 0 }}</strong><span>New words</span></div>
+        <div><strong>{{ practiceData?.taskWords?.review?.length ?? 0 }}</strong><span>Due for review</span></div>
+        <PopConfirm :disabled="!isSaveData" title="Changing this setting will regenerate your unfinished session." @confirm="check(() => (showPracticeSettingDialog = true))">
+          <button type="button" class="android-text-action">Daily goal {{ store.sdict.perDayStudyNumber }}</button>
+        </PopConfirm>
+      </div>
+      <details v-if="store.sdict.id" class="android-home-details">
+        <summary>More practice and settings</summary>
+        <div class="android-details-actions">
+          <button type="button" @click="freePractice()">Free practice</button>
+          <button type="button" :disabled="!practiceData?.taskWords?.review?.length" @click="startPractice(WordPracticeMode.Review, true)">Review</button>
+          <button type="button" :disabled="store.sdict.lastLearnIndex < 10 && !store.sdict.complete" @click="startPractice(WordPracticeMode.Shuffle, true)">Random review</button>
+          <button type="button" :disabled="store.sdict.lastLearnIndex < 10 && !store.sdict.complete" @click="startPractice(WordPracticeMode.ReviewWordsTest, true)">Word test</button>
+          <button type="button" :disabled="store.sdict.lastLearnIndex < 10 && !store.sdict.complete" @click="startPractice(WordPracticeMode.ShuffleWordsTest, true)">Random word test</button>
+          <button type="button" @click="startPractice(WordPracticeMode.System, true)">Smart learning</button>
+          <PopConfirm :disabled="!isSaveData" title="Changing this setting will regenerate your unfinished session." @confirm="check(() => (showChangeLastPracticeIndexDialog = true))">
+            <button type="button">Edit book progress</button>
+          </PopConfirm>
+          <label v-if="!isSaveData && dueReviewCount === 0" class="flex items-center gap-2 py-2">
+            Add random review <Switch :model-value="settingStore.autoAddRandomReviewWhenNoDue" @change="toggleAutoAddRandomReview" />
+          </label>
+        </div>
+      </details>
+    </section>
+
+    <div v-else class="card flex flex-col md:flex-row gap-4">
       <div class="flex-1 flex flex-col justify-between">
         <div class="flex gap-3">
           <div class="p-1 center rounded-full bg-white">
             <IconFluentBookNumber20Filled class="text-xl color-link" />
           </div>
           <div @click="goDictDetail(store.sdict)" class="text-2xl font-bold cursor-pointer">
-            {{ store.sdict.name || $t('no_dict_selected') }}
+            {{ getDictDisplayName(store.sdict) || $t('no_dict_selected') }}
           </div>
         </div>
 
@@ -657,7 +732,7 @@ onUnmounted(() => {
 
             <div class="text-sm flex justify-between">
               <span>{{ progressTextLeft }}</span>
-              <span> {{ store.sdict?.lastLearnIndex }} / {{ store.sdict.length }} 词</span>
+              <span> {{ store.sdict?.lastLearnIndex }} / {{ store.sdict.length }} words</span>
             </div>
           </div>
           <div class="flex items-center mt-4 gap-4">
@@ -669,7 +744,7 @@ onUnmounted(() => {
             </BaseButton>
             <PopConfirm
               :disabled="!isSaveData"
-              title="当前存在未完成的学习任务，修改会重新生成学习任务，是否继续？"
+              title="Changing this setting will regenerate your unfinished session. Continue?"
               @confirm="check(() => (showChangeLastPracticeIndexDialog = true))"
             >
               <BaseButton type="info" size="small" v-if="store.sdict.id">
@@ -693,7 +768,7 @@ onUnmounted(() => {
         </div>
       </div>
       <div class="flex-1 mt-4 md:mt-0" :class="!store.sdict.id && 'opacity-30 cursor-not-allowed'">
-        <div class="flex justify-between">
+        <div class="flex justify-between android-task-heading">
           <div class="flex items-center gap-2">
             <div class="p-2 center rounded-full bg-white">
               <IconFluentStar20Filled class="text-lg color-amber" />
@@ -714,7 +789,7 @@ onUnmounted(() => {
             {{ $t('words_count') }}
             <PopConfirm
               :disabled="!isSaveData"
-              title="当前存在未完成的学习任务，修改会重新生成学习任务，是否继续？"
+              title="Changing this setting will regenerate your unfinished session. Continue?"
               @confirm="check(() => (showPracticeSettingDialog = true))"
             >
               <BaseButton type="info" size="small">{{ $t('change') }}</BaseButton>
@@ -730,7 +805,7 @@ onUnmounted(() => {
             <div class="num flex center">
               {{ practiceData?.taskWords?.review?.length }}
               <span class="text-base color-reverse-black" v-if="!practiceData?.taskWords?.review?.length"
-                >(暂无到期词)</span
+                >(none due)</span
               >
             </div>
             <div class="txt flex center gap-1">
@@ -743,7 +818,7 @@ onUnmounted(() => {
               </Tooltip>
             </div>
             <div class="center gap-2 mt-1 text-sm" v-if="!isSaveData && dueReviewCount === 0">
-              <span>加入随机复习</span>
+              <span>Add random review</span>
               <Switch :model-value="settingStore.autoAddRandomReviewWhenNoDue" @change="toggleAutoAddRandomReview" />
             </div>
           </div>
@@ -771,7 +846,7 @@ onUnmounted(() => {
                 :disabled="!store.sdict.id"
                 @click="router.push('/practice-screen/' + encodeURIComponent(String(store.sdict.id)))"
               >
-                整本筛词
+                Screen entire book
               </BaseButton>
               <BaseButton
                 class="w-full"
@@ -841,9 +916,16 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="card flex flex-col md:flex-row gap-4 xl:gap-20 p-4 md:p-6">
+    <details v-if="isAndroidApp()" class="android-home-details android-history">
+      <summary>Study history <span>Today {{ todayTotalSpend }}</span></summary>
+      <div class="android-history-body">
+        <p>{{ totalDay }} study days · {{ totalSpend }} total</p>
+        <Calendar :highlighted-dates="calendarHighlightDates" @select-date="onSelectCalendarDate" :weekHeaderTitle="$t('this_week_record')" />
+      </div>
+    </details>
+    <div v-else class="card flex flex-col md:flex-row gap-4 xl:gap-20 p-4 md:p-6">
       <div class="flex-1 flex flex-col gap-3 min-w-0">
-        <div class="title">统计</div>
+        <div class="title">Statistics</div>
         <div class="flex gap-3 items-center w-full">
           <div class="stat2">
             <div class="num">{{ todayTotalSpend }}</div>
@@ -869,11 +951,11 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="card flex flex-col">
+    <div :id="isAndroidApp() ? 'android-word-books' : undefined" class="card flex flex-col" :class="{ 'android-word-books': isAndroidApp() }">
       <div class="flex justify-between">
         <div class="title">{{ $t('my_dictionaries') }}</div>
         <div class="flex gap-4 items-center">
-          <PopConfirm title="确认删除所有选中词典？" @confirm="handleBatchDel" v-if="selectIds.length">
+          <PopConfirm title="Delete the selected wordbooks?" @confirm="handleBatchDel" v-if="selectIds.length">
             <BaseIcon class="del" :title="$t('delete')">
               <DeleteIcon />
             </BaseIcon>
@@ -894,15 +976,15 @@ onUnmounted(() => {
           <div v-if="!isAndroidApp()" class="color-link cursor-pointer" @click="nav('/dict', { isAdd: true })">
             {{ $t('create_personal_dict') }}
           </div>
-          <NuxtLink v-if="!isAndroidApp()" class="color-link" to="/import">导入词书</NuxtLink>
+          <NuxtLink v-if="!isAndroidApp()" class="color-link" to="/import">Import a wordbook</NuxtLink>
         </div>
       </div>
-      <p v-if="store.word.bookList.length > 4 && !isManageDict" class="mt-2 text-sm">拖动书卡可调整顺序</p>
-      <div class="flex gap-4 flex-wrap mt-4">
+      <p v-if="!isAndroidApp() && store.word.bookList.length > 4 && !isManageDict" class="mt-2 text-sm">Drag wordbooks to reorder them.</p>
+      <div class="flex gap-4 flex-wrap mt-4" :class="{ 'android-list': isAndroidApp() }">
         <div
           v-for="(item, j) in store.word.bookList"
           :key="item.id"
-          :draggable="j >= 3 && !isManageDict && !savingBookOrder"
+          :draggable="!isAndroidApp() && j >= 3 && !isManageDict && !savingBookOrder"
           :class="{ 'opacity-50': draggedBookId === item.id, 'ring-2 ring-blue-500 rounded': dropBookId === item.id }"
           @dragstart="startBookDrag($event, item.id, j)"
           @dragover="dragOverBook($event, item.id, j)"
@@ -911,7 +993,8 @@ onUnmounted(() => {
         >
           <Book
             :is-add="false"
-            quantifier="词"
+            :compact="isAndroidApp()"
+            quantifier=" words"
             :item="item"
             :checked="selectIds.includes(item.id)"
             @check="() => toggleSelect(item)"
@@ -934,7 +1017,7 @@ onUnmounted(() => {
       <div class="flex gap-4 flex-wrap mt-4 min-h-50">
         <Book
           :is-add="false"
-          quantifier="词"
+          quantifier=" words"
           :item="item as any"
           v-for="(item, j) in recommendDictList"
           @click="goDictDetail(item as any)"
@@ -964,7 +1047,7 @@ onUnmounted(() => {
       v-if="!studyDayRecords.length && !(isStudyDayKeyToday(selectedStudyDateKey) && todayCacheMs > 0)"
       class="text-gray-500 py-6 text-center"
     >
-      当日无学习记录
+      No study records for this day.
     </div>
     <ul v-if="studyDayRecords.length" class="study-day-list max-h-70vh overflow-y-auto space-y-3">
       <li v-for="(row, idx) in studyDayRecords" :key="idx" class="border-b border-gray-200 pb-3 last:border-0">
@@ -979,12 +1062,12 @@ onUnmounted(() => {
               'bg-orange-100 text-orange-700': row.sessionRole === 'end',
             }"
           >
-            {{ { start: '学习开始', middle: '学习中', end: '学习结束' }[row.sessionRole] }}
+            {{ { start: 'Started', middle: 'In progress', end: 'Finished' }[row.sessionRole] }}
           </span>
         </div>
         <div class="text-sm text-gray-600 mt-1">
-          时长 {{ msToHourMinute(row.spend) }} · 新学 {{ row.new }} · 复习 {{ row.review }} · 错词 {{ row.wrong }}
-          <template v-if="row.total"> · 共 {{ row.total }} 词</template>
+          Duration {{ msToHourMinute(row.spend, true) }} · New {{ row.new }} · Reviewed {{ row.review }} · Errors {{ row.wrong }}
+          <template v-if="row.total"> · {{ row.total }} words</template>
         </div>
       </li>
     </ul>
@@ -992,6 +1075,40 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
+.android-learning { padding: 20px 20px 6px; max-width: 650px; margin: auto; color: var(--android-text); }
+.android-learning-heading, .android-book-toolbar, .android-progress-label { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.android-learning-heading { margin-bottom: 17px; }
+.android-learning-heading h1 { margin: 0; font-size: 32px; font-weight: 700; line-height: 1.17; letter-spacing: -.045em; }
+.android-learning-card { padding: 18px; border: 1px solid var(--android-line); border-radius: 22px; background: var(--android-surface); }
+.android-book-toolbar { color: var(--android-muted); font-size: 13px; font-weight: 600; }
+.android-text-action { color: var(--android-accent); font-size: 14px; min-height: 44px; display: inline-flex; align-items: center; text-align: end; }
+.android-book-name { display: block; text-align: start; font-size: clamp(21px, 6vw, 27px); font-weight: 650; line-height: 1.22; overflow-wrap: anywhere; }
+.android-progress-label { align-items: baseline; margin: 16px 0 6px; }
+.android-progress-label strong { font-size: 32px; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -.05em; }
+.android-progress-label small { font-size: 17px; margin-left: 2px; }
+.android-progress-label span, .android-completed, .android-empty-book { color: var(--android-muted); font-size: 13px; }
+.android-completed, .android-empty-book { margin-top: 10px; }
+.android-learning-card progress { display: block; appearance: none; width: 100%; height: 6px; border: 0; border-radius: 6px; overflow: hidden; }
+.android-learning-card progress::-webkit-progress-bar { background: var(--android-line); }
+.android-learning-card progress::-webkit-progress-value { background: var(--android-accent); border-radius: 6px; }
+.android-learning-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
+.android-primary-action, .android-secondary-action { display: grid; place-items: center; min-height: 44px; border-radius: 24px; text-align: center; font-size: 14px; font-weight: 650; padding: 5px 8px; }
+.android-primary-action { background: var(--android-accent); color: var(--android-on-accent, #fff); }
+.android-primary-action:disabled, .android-details-actions button:disabled { opacity: .4; }
+.android-secondary-action { background: var(--android-tint); color: var(--android-accent); }
+.android-task-strip { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: center; padding: 12px 2px 8px; }
+.android-task-strip > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px; }
+.android-task-strip strong { font-size: 21px; font-weight: 650; }
+.android-task-strip span { color: var(--android-muted); font-size: 13px; }
+.android-home-details { border-bottom: 1px solid var(--android-line); }
+.android-home-details summary { min-height: 44px; align-content: center; color: var(--android-text); font-size: 14px; font-weight: 600; }
+.android-home-details summary span { float: right; color: var(--android-muted); font-weight: 400; }
+.android-details-actions { display: flex; flex-wrap: wrap; gap: 6px 14px; padding-bottom: 8px; }
+.android-details-actions button { color: var(--android-accent); font-size: 14px; min-height: 44px; }
+.android-history { margin: 0 auto 14px; width: calc(100% - 40px); max-width: 610px; }
+.android-history-body { padding: 4px 0 14px; color: var(--android-muted); }
+.android-word-books { scroll-margin-top: 70px; }
+
 .stat {
   @apply w-49% box-border flex flex-col items-center justify-center rounded-xl p-2 bg-[var(--bg-history)];
   border: 1px solid gainsboro;

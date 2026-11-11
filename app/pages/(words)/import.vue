@@ -41,7 +41,7 @@ function previewText() {
   const lines = pastedWords.value.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
   if (lines.length > 50_000) {
     failed.value = true
-    message.value = '最多预览 50,000 行，请分批输入。'
+    message.value = 'Preview up to 50,000 lines at a time.'
     return
   }
   const unique = new Map<string, string>()
@@ -52,14 +52,14 @@ function previewText() {
   }
   if (!unique.size) {
     failed.value = true
-    message.value = '请输入英文单词或词组，每行一条，最多 100 个字符。'
+    message.value = 'Enter one English word or phrase per line, up to 100 characters each.'
     return
   }
   preview.value = {
-    id: 'local-words-text-' + crypto.randomUUID(), format: '文本', skipped,
+    id: 'local-words-text-' + crypto.randomUUID(), format: 'Text', skipped,
     words: [...unique.values()].map(word => ({ word, meanings: [] })),
   }
-  if (!name.value) name.value = '我的词书'
+  if (!name.value) name.value = 'My wordbook'
   failed.value = false
   message.value = ''
 }
@@ -77,7 +77,7 @@ async function enrichPreview() {
   let matched = file.words.length - rows.length
   try {
     for (let i = 0; i < rows.length && !controller.signal.aborted; i += 4) {
-      message.value = `正在补全词条（${checked}/${rows.length}）…`
+      message.value = `Looking up entries (${checked}/${rows.length})…`
       await Promise.all(rows.slice(i, i + 4).map(async row => {
         const result = await lookupWordDetails(row.word, controller.signal)
         // 每条错误留在原词旁，方便定位拼写问题并重试。
@@ -90,8 +90,8 @@ async function enrichPreview() {
       }))
       triggerRef(preview)
     }
-    const label = controller.signal.aborted ? '已停止查询' : '查询完成'
-    message.value = `${label}，${matched} 条已补全，${file.words.length - matched} 条保留原资料。`
+    const label = controller.signal.aborted ? 'Lookup stopped' : 'Lookup complete'
+    message.value = `${label}. ${matched} updated, ${file.words.length - matched} kept as entered.`
   } finally {
     lookup.value = undefined
     busy.value = false
@@ -108,13 +108,13 @@ async function readFile(event: Event) {
   const extension = wordFileTypes.find(type => file.name.toLowerCase().endsWith('.' + type))
   if (!extension || !file.size || file.size > 64 * 1024 * 1024) {
     failed.value = true
-    message.value = '请选择非空且不超过 64 MB 的 Excel、ODS、CSV、TSV 或 PDF 文件。'
+    message.value = 'Choose a non-empty Excel, ODS, CSV, TSV, or PDF file up to 64 MB.'
     return
   }
 
   busy.value = true
   failed.value = false
-  message.value = '正在解析词表…'
+  message.value = 'Reading word list…'
   try {
     const response = await fetch(withAppBaseURL('/api/local-book/import?kind=word'), {
       method: 'POST',
@@ -125,7 +125,7 @@ async function readFile(event: Event) {
     const result = await response.json()
     if (!response.ok || !result.words?.length) {
       failed.value = true
-      message.value = result.error || '未找到可导入的词条。'
+      message.value = result.error || 'No entries found.'
       return
     }
     name.value = file.name.slice(0, -(extension.length + 1)).trim().slice(0, 20)
@@ -134,7 +134,7 @@ async function readFile(event: Event) {
   } catch (error) {
     failed.value = true
     message.value = (error as Error).name === 'TimeoutError'
-      ? '解析超时，请拆分文件后重试。' : '解析失败，请检查本地服务后重试。'
+      ? 'Reading timed out. Split the file and try again.' : 'Could not read the file. Check the local server and try again.'
   } finally {
     busy.value = false
   }
@@ -148,12 +148,12 @@ async function saveWords() {
   const bookName = name.value.trim()
   failed.value = true
   if (targetId.value && !existing) {
-    message.value = '找不到可编辑的目标词书。'
+    message.value = 'No editable destination wordbook found.'
     return
   }
   const list = store.word.bookList
   if (!existing && (!bookName || list.some(book => book.id === file.id || book.name === bookName))) {
-    message.value = !bookName ? '请输入词书名称。' : '该文件或同名词书已导入，可打开原词书追加词条。'
+    message.value = !bookName ? 'Enter a name for the wordbook.' : 'This file or name already exists. Open the original wordbook to add entries.'
     return
   }
 
@@ -163,7 +163,7 @@ async function saveWords() {
     return row.details ? fillWordDetails(word, row.details) : word
   })
   if (!words.length) {
-    message.value = '词书已包含这些词条。'
+    message.value = 'These entries are already in the wordbook.'
     return
   }
 
@@ -177,7 +177,7 @@ async function saveWords() {
     existing.length = existing.words.length
   } else {
     list.push(getDefaultDict({
-      id: file.id, name: bookName, enName: bookName, description: '本地词表 · ' + file.format,
+      id: file.id, name: bookName, enName: bookName, description: 'Local word list · ' + file.format,
       translateLanguage: 'zh-CN', custom: true, length: words.length, words,
     }))
   }
@@ -185,7 +185,7 @@ async function saveWords() {
     await persistence.saveDictState(store.$state, { canSyncRemote: false })
     preview.value = undefined
     const duplicates = file.words.length - words.length
-    message.value = '已保存 ' + words.length + ' 个词条' + (duplicates ? '，跳过 ' + duplicates + ' 个已有词条。' : '。')
+    message.value = `Saved ${words.length} entries` + (duplicates ? `, skipped ${duplicates} duplicates.` : '.')
   } catch {
     if (existing) {
       existing.words.splice(previousWords, words.length)
@@ -195,7 +195,7 @@ async function saveWords() {
       if (index !== -1) list.splice(index, 1)
     }
     failed.value = true
-    message.value = '保存失败，请检查浏览器的存储空间后重试。'
+    message.value = 'Could not save. Check your browser storage and try again.'
   } finally {
     busy.value = false
   }
@@ -207,38 +207,38 @@ async function saveWords() {
     <section class="card flex flex-col gap-4">
       <div class="flex items-center gap-3">
         <BackIcon @click="router.back()" />
-        <h1 class="page-title">导入词书</h1>
+        <h1 class="page-title">Import a wordbook</h1>
       </div>
-      <p v-if="target">追加到「{{ target.name }}」</p>
-      <Textarea v-model="pastedWords" placeholder="输入或粘贴英文单词和词组，每行一条" :autosize="{ minRows: 3, maxRows: 6 }" />
-      <p>支持 XLS、XLSX、XLSM、ODS、CSV、TSV、PDF。表格建议使用「单词」和「释义」列。PDF 请使用每行一个词条的文字版词表，扫描件需先做 OCR。</p>
+      <p v-if="target">Add to {{ target.name }}</p>
+      <Textarea v-model="pastedWords" placeholder="Type or paste one English word or phrase per line" :autosize="{ minRows: 3, maxRows: 6 }" />
+      <p>Supports XLS, XLSX, XLSM, ODS, CSV, TSV, and PDF. Use Word and Meaning columns in spreadsheets. Use one entry per line in text PDFs and run OCR on scans first.</p>
       <input ref="picker" type="file" :accept="accepted" hidden @change="readFile" />
       <div class="flex flex-wrap gap-2">
-        <BaseButton :disabled="busy || !store.load || (!!targetId && !target)" @click="previewText">预览输入词条</BaseButton>
-        <BaseButton :disabled="busy || !store.load || (!!targetId && !target)" @click="picker?.click()">选择词表文件</BaseButton>
-        <BaseButton type="info" :disabled="busy" @click="router.push('/words')">返回我的词典</BaseButton>
+        <BaseButton :disabled="busy || !store.load || (!!targetId && !target)" @click="previewText">Preview entries</BaseButton>
+        <BaseButton :disabled="busy || !store.load || (!!targetId && !target)" @click="picker?.click()">Choose a file</BaseButton>
+        <BaseButton type="info" :disabled="busy" @click="router.push('/words')">Back to wordbooks</BaseButton>
       </div>
-      <p v-if="targetId && store.load && !target" role="alert">找不到可编辑的目标词书。</p>
+      <p v-if="targetId && store.load && !target" role="alert">No editable destination wordbook found.</p>
       <p v-if="message" :role="failed ? 'alert' : 'status'">{{ message }}</p>
       <div v-if="preview" class="flex flex-col gap-3">
-        <p>识别到 {{ preview.words.length }} 个词条<span v-if="preview.skipped">，跳过 {{ preview.skipped }} 个过长词条</span>。以下预览前 {{ Math.min(10, preview.words.length) }} 条。</p>
+        <p>Found {{ preview.words.length }} entries<span v-if="preview.skipped"> and skipped {{ preview.skipped }} over the length limit</span>. Showing the first {{ Math.min(10, preview.words.length) }}.</p>
         <ul>
           <li v-for="word in preview.words.slice(0, 10)" :key="word.word" class="py-1">
             <strong>{{ word.word }}</strong>
             <span v-if="word.meanings.length || word.details?.trans.length">
               · {{ word.meanings.length ? word.meanings.join('；') : word.details?.trans.map(entry => entry.cn).join('；') }}
             </span>
-            <span v-if="word.details" class="ml-2 text-sm">已补全</span>
+            <span v-if="word.details" class="ml-2 text-sm">Completed</span>
             <span v-if="word.error" class="ml-2 text-sm text-red-600" role="alert">{{ word.error }}</span>
           </li>
         </ul>
         <label v-if="!targetId" class="flex items-center gap-2">
-          词书名称 <BaseInput v-model="name" :maxlength="20" />
+          Wordbook name <BaseInput v-model="name" :maxlength="20" />
         </label>
         <div class="flex flex-wrap gap-2">
-          <BaseButton type="info" :disabled="busy" @click="enrichPreview">联网一键补全</BaseButton>
-          <BaseButton v-if="lookup" type="info" @click="lookup.abort()">停止补全</BaseButton>
-          <BaseButton :disabled="busy" @click="saveWords">确认导入</BaseButton>
+          <BaseButton type="info" :disabled="busy" @click="enrichPreview">Complete entries online</BaseButton>
+          <BaseButton v-if="lookup" type="info" @click="lookup.abort()">Stop lookup</BaseButton>
+          <BaseButton :disabled="busy" @click="saveWords">Import entries</BaseButton>
         </div>
       </div>
     </section>

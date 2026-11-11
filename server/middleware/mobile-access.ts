@@ -11,7 +11,7 @@ export default defineEventHandler(async event => {
   if (['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip)) {
     if (/^(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/i.test(getHeader(event, 'host') || '')) return
     setResponseStatus(event, 403)
-    return { error: '请使用电脑本机地址访问。' }
+    return { error: 'Open the page using the computer’s local address.' }
   }
   const localNetworks = new BlockList()
   for (const entry of Object.values(networkInterfaces()).flat()) {
@@ -22,19 +22,22 @@ export default defineEventHandler(async event => {
   }
   if (!localNetworks.check(ip.replace(/^::ffff:/, ''))) {
     setResponseStatus(event, 403)
-    return { error: '手机须与电脑连接同一局域网。' }
+    return { error: 'Connect your phone and computer to the same local network.' }
   }
   const path = event.path.split('?')[0]
   if (path === '/api/mobile/health') return
-  const allowed = ['/api/mobile/state', '/api/voice', '/api/word-details'].includes(path)
+  if (event.method === 'GET' && ['/api/mobile/update', '/api/mobile/update.apk'].includes(path)) return
+  const allowed = ['/api/mobile/state', '/api/voice', '/api/word-details'].includes(path) ||
+    (event.method === 'POST' && path === '/api/local-book/import')
   if (!allowed) {
     setResponseStatus(event, 403)
-    return { error: '请使用配对后的 Android 应用访问电脑服务。' }
+    return { error: 'Pair the Android app with this computer first.' }
   }
   const supplied = Buffer.from(getHeader(event, 'x-typewords-pairing') || '')
   const expected = Buffer.from(await mobileToken())
   if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
     setResponseStatus(event, 403)
-    return { error: '请使用配对后的 Android 应用访问电脑服务。' }
+    return { error: 'Pair the Android app with this computer first.' }
   }
+  event.context.mobilePaired = true
 })

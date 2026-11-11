@@ -32,6 +32,7 @@ import {
   _nextTick,
   convertToWord,
   ensureCustomDictCopy,
+  getDictDisplayName,
   isMobile,
   loadJsLib,
   resourceWrap,
@@ -77,8 +78,8 @@ let wordForm = $ref(getDefaultFormWord())
 let wordFormRef = $ref()
 const wordRules = reactive({
   word: [
-    { required: true, message: '请输入单词', trigger: 'blur' },
-    { max: 100, message: '名称不能超过100个字符', trigger: 'blur' },
+    { required: true, message: 'Enter a word.', trigger: 'blur' },
+    { max: 100, message: 'Use at most 100 characters.', trigger: 'blur' },
   ],
 })
 let studyLoading = $ref(false)
@@ -120,7 +121,7 @@ function onWordFormWordChange(value: string) {
 async function searchOfficialWord(save = false) {
   const word = wordForm.word?.trim()
   if (!word || word.length > 100) {
-    Toast.warning('请输入 1 至 100 个字符的英文单词或词组')
+    Toast.warning('Enter an English word or phrase of 1 to 100 characters.')
     return
   }
   if (wordSearchLoading || enrichingWord !== null) return
@@ -143,7 +144,7 @@ async function searchOfficialWord(save = false) {
           if (form.id) editWord(entry)
           else resetWordForm()
         }
-        Toast.success(form.id ? '已补全并保存' : '已补全并添加')
+        Toast.success(form.id ? 'Completed and saved.' : 'Completed and added.')
       }
     } else {
       wordForm = { ...word2Str(filled), note: form.note }
@@ -158,17 +159,17 @@ async function searchOfficialWord(save = false) {
 async function saveEnrichedWord(entry: Word, bookId: Dict['id'], originalId?: Word['id'], note?: string) {
   const index = base.word.bookList.findIndex(book => book.id === bookId && (book.custom || book.system))
   if (index < 0) {
-    Toast.warning('找不到可编辑的词书')
+    Toast.warning('No editable wordbook found.')
     return false
   }
   const book = base.word.bookList[index]
   const position = originalId ? book.words.findIndex(word => word.id === originalId) : -1
   if (originalId && position < 0) {
-    Toast.warning('词条已移除，请刷新列表')
+    Toast.warning('This entry was removed. Refresh the list.')
     return false
   }
   if (book.words.some((word, i) => i !== position && word.word.trim().toLowerCase() === entry.word.toLowerCase())) {
-    Toast.warning('已有相同名称单词')
+    Toast.warning('This word already exists.')
     return false
   }
   const words = [...book.words]
@@ -186,7 +187,7 @@ async function saveEnrichedWord(entry: Word, bookId: Dict['id'], originalId?: Wo
       if (oldNote === undefined) delete base.noteData[entry.word]
       else base.noteData[entry.word] = oldNote
     }
-    Toast.warning('保存失败，请重试')
+    Toast.warning('Could not save. Try again.')
     return false
   }
   if (runtimeStore.editDict.id === bookId) {
@@ -213,7 +214,7 @@ async function enrichSavedWord(word: Word) {
     if (!current) return
     const filled = fillWordDetails(current, result.details)
     if (isSameWordContent(current, filled)) {
-      Toast.success('词条资料已齐全')
+      Toast.success('This entry is already complete.')
       return
     }
     if (await saveEnrichedWord(filled, bookId, current.id)) {
@@ -223,7 +224,7 @@ async function enrichSavedWord(word: Word) {
           if (typeof wordForm[key] === 'string' && !wordForm[key].trim()) wordForm[key] = details[key]
         }
       }
-      Toast.success('词条已补全')
+      Toast.success('Entry completed.')
     }
   } finally {
     enrichingWord = null
@@ -270,9 +271,9 @@ async function onSubmitWord() {
         let r = allList.find(v => v.id === data.id)
         if (r) {
           Object.assign(r, data)
-          Toast.success('修改成功')
+          Toast.success('Changes saved.')
         } else {
-          Toast.success('修改失败，未找到单词')
+          Toast.success('Could not find the word to update.')
           return
         }
       } else {
@@ -280,15 +281,15 @@ async function onSubmitWord() {
         data.checked = false
         let r = allList.find(v => v.word === wordForm.word)
         if (r) {
-          Toast.warning('已有相同名称单词！')
+          Toast.warning('This word already exists.')
           return
         } else allList.push(data)
-        Toast.success('添加成功')
+        Toast.success('Added.')
         resetWordForm()
       }
       syncDictInMyStudyList()
     } else {
-      Toast.warning('请填写完整')
+      Toast.warning('Complete the required fields.')
     }
   })
 }
@@ -323,7 +324,7 @@ function word2Str(word) {
   res.phrases = word.phrases.map(v => (v.c + '\n' + v.cn).replaceAll('"', '')).join('\n\n')
   res.synos = word.synos.map(v => (v.pos + v.cn + '\n' + v.ws.join('/')).replaceAll('"', '')).join('\n\n')
   res.relWords = word.relWords.root
-    ? '词根:' +
+    ? 'Root: ' +
       word.relWords.root +
       '\n\n' +
       word.relWords.rels
@@ -366,7 +367,7 @@ const showBookDetail = computed(() => {
 function createCopy() {
   // 生成副本数据，不写入 store。经由 initialData 传给 EditBook，确认后才写入
   const copy = ensureCustomDictCopy(runtimeStore.editDict)
-  copy.name = runtimeStore.editDict.name + ' (副本)'
+  copy.name = runtimeStore.editDict.name + ' (Copy)'
   _copyData = copy
   isAdd = true
 }
@@ -459,11 +460,24 @@ async function startPractice(query = {}) {
   nav('practice-words/' + store.sdict.id, query, { taskWords: currentStudy })
 }
 
+/** 打开设置前读取当前词书进度，避免沿用详情页挂载时的旧快照。 */
 async function addMyStudyList() {
-  if (!runtimeStore.editDict.words.length) {
-    return Toast.warning('没有单词可学习！')
+  if (studyLoading) return
+  const selected = runtimeStore.editDict
+  if (!selected.words.length) {
+    return Toast.warning('There are no words to study.')
   }
-  showPracticeSettingDialog = true
+  studyLoading = true
+  try {
+    const progress = await base.getSavedWordBookProgress(selected)
+    if (runtimeStore.editDict !== selected) return
+    if (progress) Object.assign(selected, progress)
+    showPracticeSettingDialog = true
+  } catch {
+    Toast.warning('Could not load saved study progress. Try again.')
+  } finally {
+    studyLoading = false
+  }
 }
 
 async function startTest() {
@@ -515,7 +529,7 @@ async function exportXlsxData() {
   wb.Sheets['Sheet1'] = XLSX.utils.json_to_sheet(sheetData)
   wb.SheetNames = ['Sheet1']
   XLSX.writeFile(wb, `${filename}.xlsx`)
-  Toast.success(filename + ' 导出成功！')
+  Toast.success(filename + ' exported.')
   exportXlsxLoading = false
 }
 
@@ -544,11 +558,11 @@ watch(
       })
       tour.addStep({
         id: 'step3',
-        text: '点击这里开始学习',
+        text: 'Tap here to start learning.',
         attachTo: { element: '#study', on: 'bottom' },
         buttons: [
           {
-            text: `下一步（3/${TourConfig.total}）`,
+            text: `Next (3/${TourConfig.total})`,
             action() {
               tour.next()
               addMyStudyList()
@@ -559,7 +573,7 @@ watch(
 
       tour.addStep({
         id: 'step4',
-        text: '这里可以选择学习模式、设置学习数量、修改学习进度',
+        text: 'Choose a mode, set your daily goal, or edit your progress here.',
         attachTo: { element: '#mode', on: 'bottom' },
         beforeShowPromise() {
           return new Promise(resolve => {
@@ -573,7 +587,7 @@ watch(
         },
         buttons: [
           {
-            text: `下一步（4/${TourConfig.total}）`,
+            text: `Next (4/${TourConfig.total})`,
             action: async () => {
               tour.next()
               await startPractice({ guide: 1 })
@@ -633,7 +647,7 @@ function onSort(type: Sort, pageNo: number, pageSize: number) {
     .concat(fun(allList.slice(pageSize * (pageNo - 1), pageSize * (pageNo - 1) + pageSize)))
     .concat(allList.slice(pageSize * (pageNo - 1) + pageSize))
   runtimeStore.editDict.words = allList
-  Toast.success('操作成功')
+  Toast.success('Done.')
   tableRef.value.getData()
   syncDictInMyStudyList()
 }
@@ -647,7 +661,7 @@ defineRender(() => {
         <div className="card mb-0 dict-detail-card flex flex-col">
           <div class="dict-header flex justify-between items-center relative">
             <BackIcon class="dict-back z-2" />
-            <div class="dict-title absolute page-title text-align-center w-full">{runtimeStore.editDict.name}</div>
+            <div class="dict-title absolute page-title text-align-center w-full">{getDictDisplayName(runtimeStore.editDict)}</div>
             <div class="dict-actions flex">
               {runtimeStore.editDict.custom ? (
                 <BaseButton loading={studyLoading || loading} type="info" onClick={() => (isEdit = true)}>
@@ -659,7 +673,7 @@ defineRender(() => {
                 </BaseButton>
               )}
               {editable && !isAndroidApp() && (
-                <BaseButton type="info" onClick={goImportPage}>导入词条</BaseButton>
+                <BaseButton type="info" onClick={goImportPage}>Import entries</BaseButton>
               )}
               <BaseButton loading={studyLoading || loading} type="info" onClick={startTest}>
                 {$t('test')}
@@ -728,7 +742,7 @@ defineRender(() => {
                               disabled={wordSearchLoading || enrichingWord !== null}
                               onClick={event => { event.stopPropagation(); void enrichSavedWord(val.item) }}
                             >
-                              {enrichingWord === String(val.item.id) ? '补全中…' : '一键补全'}
+                              {enrichingWord === String(val.item.id) ? 'Looking up…' : 'Complete entry'}
                             </button>
                           )}
                           <div class="flex flex-col">
@@ -741,7 +755,7 @@ defineRender(() => {
                               <IconFluentTextEditStyle20Regular />
                             </BaseIcon>
                             {editable ? (
-                              <PopConfirm title="确认删除？" onConfirm={() => batchDel([val.item.id])}>
+                              <PopConfirm title="Delete this entry?" onConfirm={() => batchDel([val.item.id])}>
                                 <BaseIcon class="option-icon" title={$t('delete')}>
                                   <DeleteIcon />
                                 </BaseIcon>
@@ -772,7 +786,7 @@ defineRender(() => {
                   model={wordForm}
                   label-width="7rem"
                 >
-                  <FormItem label="单词" prop="word">
+                  <FormItem label="Word" prop="word">
                     <BaseInput
                       modelValue={wordForm.word}
                       onUpdate:modelValue={onWordFormWordChange}
@@ -783,72 +797,72 @@ defineRender(() => {
                       onEnter={() => searchOfficialWord()}
                     />
                   </FormItem>
-                  <FormItem label="英音音标">
+                  <FormItem label="UK pronunciation">
                     <BaseInput modelValue={wordForm.phonetic0} onUpdate:modelValue={e => (wordForm.phonetic0 = e)} />
                   </FormItem>
-                  <FormItem label="美音音标">
+                  <FormItem label="US pronunciation">
                     <BaseInput modelValue={wordForm.phonetic1} onUpdate:modelValue={e => (wordForm.phonetic1 = e)} />
                   </FormItem>
-                  <FormItem label="翻译">
+                  <FormItem label="Meanings">
                     <Textarea
                       modelValue={wordForm.trans}
                       onUpdate:modelValue={e => (wordForm.trans = e)}
-                      placeholder="一行一个翻译，前面词性，后面内容（如n.取消）；多个翻译请换行"
+                      placeholder="One meaning per line. Start with the part of speech."
                       autosize={{ minRows: 6, maxRows: 10 }}
                     />
                   </FormItem>
-                  <FormItem label="笔记">
+                  <FormItem label="Notes">
                     <Textarea
                       modelValue={wordForm.note}
                       onUpdate:modelValue={e => (wordForm.note = e)}
-                      placeholder="记录这个单词的个人笔记"
+                      placeholder="Add a note about this word"
                       autosize={{ minRows: 3, maxRows: 8 }}
                     />
                   </FormItem>
-                  <FormItem label="例句">
+                  <FormItem label="Examples">
                     <Textarea
                       modelValue={wordForm.sentences}
                       onUpdate:modelValue={e => (wordForm.sentences = e)}
-                      placeholder="一行原文，一行译文；多个请换两行"
+                      placeholder="Original and translation on separate lines. Leave a blank line between pairs."
                       autosize={{ minRows: 6, maxRows: 10 }}
                     />
                   </FormItem>
-                  <FormItem label="短语">
+                  <FormItem label="Phrases">
                     <Textarea
                       modelValue={wordForm.phrases}
                       onUpdate:modelValue={e => (wordForm.phrases = e)}
-                      placeholder="一行原文，一行译文；多个请换两行"
+                      placeholder="Original and translation on separate lines. Leave a blank line between pairs."
                       autosize={{ minRows: 6, maxRows: 10 }}
                     />
                   </FormItem>
-                  <FormItem label="同义词">
+                  <FormItem label="Synonyms">
                     <Textarea
                       modelValue={wordForm.synos}
                       onUpdate:modelValue={e => (wordForm.synos = e)}
-                      placeholder="请参考已有单词格式"
+                      placeholder="Follow the format of existing entries."
                       autosize={{ minRows: 6, maxRows: 20 }}
                     />
                   </FormItem>
-                  <FormItem label="同根词">
+                  <FormItem label="Related words">
                     <Textarea
                       modelValue={wordForm.relWords}
                       onUpdate:modelValue={e => (wordForm.relWords = e)}
-                      placeholder="请参考已有单词格式"
+                      placeholder="Follow the format of existing entries."
                       autosize={{ minRows: 6, maxRows: 20 }}
                     />
                   </FormItem>
-                  <FormItem label="词源">
+                  <FormItem label="Etymology">
                     <Textarea
                       modelValue={wordForm.etymology}
                       onUpdate:modelValue={e => (wordForm.etymology = e)}
-                      placeholder="请参考已有单词格式"
+                      placeholder="Follow the format of existing entries."
                       autosize={{ minRows: 6, maxRows: 10 }}
                     />
                   </FormItem>
                 </Form>
                 <div class="center">
                   <BaseButton type="info" loading={wordSearchLoading} disabled={enrichingWord !== null} onClick={() => searchOfficialWord(true)}>
-                    {wordForm.id ? '一键补全并保存' : '一键补全并添加'}
+                    {wordForm.id ? 'Complete and save' : 'Complete and add'}
                   </BaseButton>
                   <BaseButton type="info" onClick={closeWordForm}>
                     {$t('close')}
@@ -881,7 +895,7 @@ defineRender(() => {
           {isAdd && !_copyData && (
             <div class="center mt-4">
               <BaseButton type="info" onClick={() => router.push('/import')}>
-                从表格或 PDF 导入词书
+                Import a spreadsheet or PDF
               </BaseButton>
             </div>
           )}

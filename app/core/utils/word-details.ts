@@ -14,9 +14,9 @@ export async function lookupWordDetails(word: string, signal?: AbortSignal): Pro
     })
     const result = await response.json()
     if (response.ok && Array.isArray(result.trans)) return { details: result }
-    return { error: result.error || '在线词典暂不可用，请稍后重试。' }
+    return { error: result.error || 'The online dictionary is unavailable. Try again shortly.' }
   } catch {
-    return { error: '在线词典暂不可用，请检查网络后重试。' }
+    return { error: 'The online dictionary is unavailable. Check your connection and try again.' }
   }
 }
 

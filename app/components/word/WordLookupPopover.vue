@@ -14,8 +14,8 @@ const settingStore = useSettingStore()
 const playWordAudio = usePlayWordAudio()
 const popover = ref<HTMLElement | null>(null)
 const dictionaryTabs = [
-  { value: 'youdao', label: '有道词典' },
-  { value: 'iciba', label: '金山词霸' },
+  { value: 'youdao', label: 'Youdao Dictionary' },
+  { value: 'iciba', label: 'Kingsoft Dictionary' },
 ] as const
 const activeDictionary = ref<(typeof dictionaryTabs)[number]['value']>('youdao')
 const dictionaryLabel = computed(() => dictionaryTabs.find(tab => tab.value === activeDictionary.value)!.label)
@@ -145,7 +145,7 @@ watch(
         <Close class="close-btn" :title="$t('close')" @click="closeWordLookup" />
 
         <template v-if="wordLookupState.loading">
-          <div class="text-sm color-gray py-2 pr-5">查询中...</div>
+          <div class="text-sm color-gray py-2 pr-5">Looking up word…</div>
         </template>
         <template v-else-if="wordLookupState.notFound">
           <div class="flex items-center gap-2 flex-wrap pr-5">
@@ -156,8 +156,8 @@ watch(
             </BaseIcon>
           </div>
           <div class="mt-1 mb-3 flex items-center gap-3 flex-wrap text-sm">
-            <span class="color-gray">暂未收录</span>
-            <div role="tablist" aria-label="查词词典" class="dictionary-tabs ml-auto">
+            <span class="color-gray">No entry found</span>
+            <div role="tablist" aria-label="Dictionaries" class="dictionary-tabs ml-auto">
               <button
                 v-for="tab in dictionaryTabs"
                 :id="`word-lookup-tab-${tab.value}`"
@@ -174,7 +174,7 @@ watch(
                 {{ tab.label }}
               </button>
             </div>
-            <a :href="dictionaryUrl" target="_blank" rel="noopener noreferrer" class="text-link">在新窗口打开</a>
+            <a :href="dictionaryUrl" target="_blank" rel="noopener noreferrer" class="text-link">Open in a new window</a>
           </div>
           <div
             id="word-lookup-dictionary-panel"

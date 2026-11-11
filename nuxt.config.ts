@@ -54,9 +54,9 @@ export default defineNuxtConfig({
     baseURL: appBaseURL,
     // keepalive: true,
     head: {
-      title: 'Type Words — 免费英语单词练习 | Free English Typing Practice', // default fallback title
+      title: 'TypeWords — English Vocabulary and Typing Practice',
       htmlAttrs: {
-        lang: 'zh-CN',
+        lang: 'en',
       },
       link: [{ rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }],
     },
@@ -92,21 +92,9 @@ export default defineNuxtConfig({
   i18n: {
     locales: [
       { code: 'en', language: 'en-US', file: 'en.json', name: 'English' },
-      { code: 'zh', language: 'zh-CN', file: 'zh.json', name: '中文' },
-      { code: 'es', language: 'es-ES', file: 'es.json', name: 'Español' },
-      { code: 'fr', language: 'fr-FR', file: 'fr.json', name: 'Français' },
-      { code: 'pt', language: 'pt-BR', file: 'pt.json', name: 'Português' },
-      { code: 'de', language: 'de-DE', file: 'de.json', name: 'Deutsch' },
-      { code: 'ru', language: 'ru-RU', file: 'ru.json', name: 'Русский' },
-      { code: 'uk', language: 'uk-UA', file: 'uk.json', name: 'Українська' },
-      { code: 'ja', language: 'ja-JP', file: 'ja.json', name: '日本語' },
-      { code: 'ko', language: 'ko-KR', file: 'ko.json', name: '한국어' },
-      { code: 'th', language: 'th-TH', file: 'th.json', name: 'ไทย' },
-      { code: 'vi', language: 'vi-VN', file: 'vi.json', name: 'Tiếng Việt' },
-      { code: 'id', language: 'id-ID', file: 'id.json', name: 'Bahasa Indonesia' },
-      { code: 'tw', language: 'zh-TW', file: 'tw.json', name: '繁體中文' },
     ],
-    defaultLocale: 'zh',
+    defaultLocale: 'en',
+    detectBrowserLanguage: false,
     // langDir:'app/i18n/',
     strategy: 'no_prefix',
   },

@@ -1,0 +1,27 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9092AA53-FB77-4645-B42D-1CCCA6BD08BD}") = "TypeWords", "TypeWords.njsproj", "{8EFE9B1C-B3A0-4ACD-A8CC-38F3D5DBB4AE}"
+EndProject
+Project("{9092AA53-FB77-4645-B42D-1CCCA6BD08BD}") = "TypeWords.Android", "android\TypeWords.Android.njsproj", "{C8624853-C889-4B71-AB11-62EC790267B7}"
+ ProjectSection(ProjectDependencies) = postProject
+  {8EFE9B1C-B3A0-4ACD-A8CC-38F3D5DBB4AE} = {8EFE9B1C-B3A0-4ACD-A8CC-38F3D5DBB4AE}
+ EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C8624853-C889-4B71-AB11-62EC790267B7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C8624853-C889-4B71-AB11-62EC790267B7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C8624853-C889-4B71-AB11-62EC790267B7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C8624853-C889-4B71-AB11-62EC790267B7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8EFE9B1C-B3A0-4ACD-A8CC-38F3D5DBB4AE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8EFE9B1C-B3A0-4ACD-A8CC-38F3D5DBB4AE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8EFE9B1C-B3A0-4ACD-A8CC-38F3D5DBB4AE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8EFE9B1C-B3A0-4ACD-A8CC-38F3D5DBB4AE}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

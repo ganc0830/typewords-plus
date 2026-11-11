@@ -26,7 +26,7 @@ import {
   RESOURCE_PATH,
   SAVE_DICT_KEY,
 } from '../config/env'
-import { nextTick } from 'vue'
+import { nextTick, toRaw } from 'vue'
 import { Toast } from '@/base'
 import { get } from 'idb-keyval'
 import { nanoid } from 'nanoid'
@@ -242,22 +242,32 @@ export async function checkAndUpgradeSaveSetting(val: any) {
   return defaultState
 }
 
-//筛选未自定义的词典，未自定义的词典不需要保存单词，用的时候再下载
+/** 从 n 生成独立的持久化快照，先移除可重新加载的正文和运行时分句，避免复制整份书库。 */
 export function shakeCommonDict(n: BaseState): BaseState {
-  let data: BaseState = cloneDeep(n)
-  data.word.bookList.map((v: Dict) => {
-    if (!v.custom && !v.system) v.words = []
+  // 此处仅捕获保存时的值，不收集响应式依赖。最终深拷贝保留调用方独立修改快照的约定。
+  const state = toRaw(n)
+  return cloneDeep({
+    ...state,
+    word: {
+      ...state.word,
+      bookList: state.word.bookList.map(book => {
+        const value = toRaw(book)
+        return { ...value, words: value.custom || value.system ? value.words : [] }
+      }),
+    },
+    article: {
+      ...state.article,
+      bookList: state.article.bookList.map(book => {
+        const value = toRaw(book)
+        return {
+          ...value,
+          articles: value.custom || value.system
+            ? value.articles.map(article => ({ ...toRaw(article), sections: [] }))
+            : [],
+        }
+      }),
+    },
   })
-  data.article.bookList.map((v: Dict) => {
-    if (!v.custom && !v.system) v.articles = []
-    else {
-      v.articles.map(a => {
-        //运行时再生成
-        a.sections = []
-      })
-    }
-  })
-  return data
 }
 
 export function isMobile(): boolean {
@@ -289,17 +299,17 @@ export function _dateFormat(val: any, format: string = 'YYYY/MM/DD HH:mm'): stri
   return dayjs(d).format(format)
 }
 
-export function msToHourMinute(ms: number, en: boolean = false) {
+export function msToHourMinute(ms: number, en: boolean = true) {
   const d = dayjs.duration(ms)
   const totalMinutes = Math.floor(d.asMinutes())
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60
   if (hours) return `${hours}${en ? 'h' : '小时'}${minutes}${en ? 'm' : '分钟'}`
   if (minutes) return `${minutes}${en ? 'm' : '分钟'}`
-  return `${Math.floor(d.asSeconds())}秒`
+  return `${Math.floor(d.asSeconds())}${en ? 's' : '秒'}`
 }
 
-export function msToMinute(ms: number, en: boolean = false) {
+export function msToMinute(ms: number, en: boolean = true) {
   return `${Math.floor(dayjs.duration(ms).asMinutes())}${en ? 'm' : '分钟'}`
 }
 
@@ -680,6 +690,14 @@ export function getDictIdentityList(dict?: DictIdentity | null): string[] {
 export function isDictIdMatch(dict: DictIdentity | null | undefined, id: unknown): boolean {
   const target = normalizeDictId(id)
   return !!target && getDictIdentityList(dict).includes(target)
+}
+
+/** 只翻译内置词单名称，保留用户词书名称和同步数据。 */
+export function getDictDisplayName(dict?: DictIdentity & { name?: string }) {
+  if (isDictIdMatch(dict, DictId.wordCollect) || isDictIdMatch(dict, DictId.articleCollect)) return 'Favorites'
+  if (isDictIdMatch(dict, DictId.wordWrong)) return 'Mistakes'
+  if (isDictIdMatch(dict, DictId.wordKnown)) return 'Mastered'
+  return dict?.name ?? ''
 }
 
 export function isSameDictResource(a?: DictIdentity | null, b?: DictIdentity | null): boolean {

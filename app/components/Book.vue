@@ -2,6 +2,7 @@
 import type { Dict } from '@/core/types'
 import { Checkbox, Progress } from '@/base'
 import { withAppBaseURL } from '@/core/utils/base-url'
+import { getDictDisplayName } from '@/core/utils'
 
 interface IProps {
   item?: Partial<Dict>
@@ -12,6 +13,7 @@ interface IProps {
   selected?: boolean
   showProgress?: boolean
   isUser?: boolean //是否是用户的词典
+  compact?: boolean
 }
 
 const props = withDefaults(defineProps<IProps>(), {
@@ -48,13 +50,20 @@ function handleClick(e: MouseEvent) {
 </script>
 
 <template>
-  <div style="width: var(--book-width)" :id="`dict-${item?.id}`" v-if="!isAdd" @click="handleClick">
+  <button v-if="compact && !isAdd" type="button" class="compact-book" :id="`dict-${item?.id}`" :aria-pressed="showCheckbox ? !!checked : undefined" @click="handleClick">
+    <img v-if="coverSrc" :src="coverSrc" alt="" />
+    <span v-else class="compact-book-icon"><IconFluentBookLetter20Regular /></span>
+    <strong>{{ getDictDisplayName(item) }}</strong>
+    <span class="compact-book-count">{{ studyProgress }}{{ item?.length }}{{ quantifier }}</span>
+    <span v-if="showCheckbox && checked" aria-hidden="true">✓</span>
+  </button>
+  <div style="width: var(--book-width)" :id="`dict-${item?.id}`" v-else-if="!isAdd" @click="handleClick">
     <div
       class="book overflow-hidden relative"
       :class="[showCheckbox && 'book-selectable', (selected || checked) && 'book-selected']"
     >
       <img class="absolute top-0 left-0 w-full object-cover" v-if="item?.cover" :src="coverSrc" alt="" />
-      <div class="text-base mt-1" v-else>{{ item?.name }}</div>
+      <div class="text-base mt-1" v-else>{{ getDictDisplayName(item) }}</div>
       <div class="absolute bottom-4 right-3 z-1" v-if="!item?.cover">
         <div>{{ studyProgress }}{{ item?.length }}{{ quantifier }}</div>
       </div>
@@ -73,12 +82,12 @@ function handleClick(e: MouseEvent) {
         class="absolute left-2 bottom-3 z-3"
       />
       <div class="custom z-1" v-if="item.custom">{{ $t('custom') }}</div>
-      <div class="system z-1" v-else-if="item.system">内置</div>
+      <div class="system z-1" v-else-if="item.system">Built-in</div>
       <!--      <div class="custom bg-red! color-white z-1" v-else-if="item.update">更新中</div>-->
       <!--      <div class="sync bg-red! color-white z-1" v-if="!item.sync && isUser && !showCheckbox">未同步</div>-->
     </div>
     <div class="flex justify-between text-base mt-1" v-if="item?.cover">
-      <div class="w-6/10 truncate">{{ item?.name }}</div>
+      <div class="w-6/10 truncate">{{ getDictDisplayName(item) }}</div>
       <div>{{ studyProgress }}{{ item?.length }}{{ quantifier }}</div>
     </div>
   </div>
@@ -90,6 +99,13 @@ function handleClick(e: MouseEvent) {
 </template>
 
 <style scoped lang="scss">
+.compact-book { display: flex; align-items: center; gap: 12px; text-align: left; width: 100%; min-height: 64px; padding: 8px 0; border-bottom: 1px solid var(--android-line); }
+.compact-book strong { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.compact-book img, .compact-book-icon { width: 40px; height: 40px; flex: none; border-radius: 10px; }
+.compact-book img { object-fit: cover; }
+.compact-book-icon { display: grid; place-items: center; background: var(--android-tint); color: var(--android-accent); }
+.compact-book-count { white-space: nowrap; font-size: 13px; }
+
 .book-selectable {
   &:hover {
     border-color: var(--color-input-border);

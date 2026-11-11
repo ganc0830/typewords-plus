@@ -10,10 +10,11 @@ import { onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import { useInit } from '@/core/composables/useInit.ts'
-import { useI18n } from 'vue-i18n'
 import { Supabase } from '@/core/utils/supabase.ts'
 import MiniProgram from '@/components/MiniProgram.vue'
 import WordCollectPopover from '@/components/word/WordCollectPopover.vue'
+import AndroidSelectionActions from '@/components/word/AndroidSelectionActions.vue'
+import AndroidNavigation from '@/components/AndroidNavigation.vue'
 import { isAndroidApp, mobileStatus } from '@/core/utils/mobile-sync'
 const androidApp = isAndroidApp()
 
@@ -29,23 +30,30 @@ function toggleExpand(n: boolean) {
   document.documentElement.style.setProperty('--aside-width', n ? '14rem' : '4.5rem')
 }
 
+/** 应用页面主题，并让 Android 的系统栏颜色与图标一起更新。 */
+function applyTheme(theme: string) {
+  setTheme(theme)
+  if (androidApp) {
+    ;(window as any).TypeWordsAndroid?.setSystemBarsDark?.(getTheme() === 'dark')
+  }
+}
+
 watch(
   () => settingStore.load,
   n => {
     if (!n) return
     toggleExpand(settingStore.sideExpand)
-    setTheme(settingStore.theme)
+    applyTheme(settingStore.theme)
   }
 )
 
 watch(
   () => settingStore.theme,
   n => {
-    setTheme(n)
+    applyTheme(n)
   }
 )
 
-const { locales, setLocale } = useI18n()
 const route = useRoute()
 
 const showIcon = $computed(() => {
@@ -53,6 +61,7 @@ const showIcon = $computed(() => {
 })
 
 onMounted(() => {
+  if (androidApp) applyTheme(settingStore.theme)
   init()
   window.umami?.track('sync', { check: Supabase.check() })
 })
@@ -67,10 +76,11 @@ function onMouseLeave() {
 </script>
 
 <template>
-  <div class="layout anim">
+  <div class="layout anim" :class="{ 'android-shell': androidApp, 'android-tab-page': androidApp && ['/words', '/articles', '/library'].includes(route.path) }">
+    <AndroidNavigation v-if="androidApp" />
     <!--    第一个aside 占位用-->
-    <div class="aside space"></div>
-    <div class="aside fixed" :class="!expand && 'hidden-span'" @mouseenter="onMouseEnter" @mouseleave="onMouseLeave">
+    <div v-if="!androidApp" class="aside space"></div>
+    <div v-if="!androidApp" class="aside fixed" :class="!expand && 'hidden-span'" @mouseenter="onMouseEnter" @mouseleave="onMouseLeave">
       <div class="top p-4">
         <div v-if="expand" class="flex justify-between">
           <Logo />
@@ -95,7 +105,7 @@ function onMouseLeave() {
         </NuxtLink>
         <NuxtLink to="/library" class="row">
           <IconFluentBookLetter20Regular />
-          <span>小说与书籍</span>
+          <span>Library</span>
         </NuxtLink>
         <NuxtLink v-if="!androidApp" to="/feedback" class="row">
           <IconFluentCommentEdit20Regular />
@@ -124,7 +134,7 @@ function onMouseLeave() {
     </div>
 
     <!-- 移动端顶部菜单栏 -->
-    <div class="mobile-top-nav" :class="{ collapsed: settingStore.mobileNavCollapsed }">
+    <div v-if="!androidApp" class="mobile-top-nav" :class="{ collapsed: settingStore.mobileNavCollapsed }">
       <div class="nav-items">
         <div v-if="!androidApp" class="nav-item" @click="router.push('/')" :class="{ active: route.path === '/' }">
           <IconFluentHome20Regular />
@@ -140,7 +150,7 @@ function onMouseLeave() {
         </div>
         <div class="nav-item" @click="router.push('/library')" :class="{ active: route.path === '/library' }">
           <IconFluentBookLetter20Regular />
-          <span>书籍</span>
+          <span>Library</span>
         </div>
         <div v-if="!androidApp" class="nav-item" @click="router.push('/setting')" :class="{ active: route.path === '/setting' }">
           <IconFluentSettings20Regular />
@@ -157,7 +167,7 @@ function onMouseLeave() {
     <IeDialog />
 
     <div class="flex-1 z-1 relative main-content overflow-x-hidden">
-      <NuxtLink to="/mobile-sync" class="block text-sm px-4 py-2 color-link">{{ mobileStatus }} · 同步</NuxtLink>
+      <NuxtLink v-if="!androidApp" to="/mobile-sync" class="block text-sm px-4 py-2 color-link">{{ mobileStatus }} · Sync</NuxtLink>
       <div
         class="mt-3 center relative z-9999 pointer-events-none"
         @click="router.push('/setting?index=6 ')"
@@ -174,23 +184,8 @@ function onMouseLeave() {
       <!--      <slot></slot>-->
       <router-view></router-view>
 
-      <div class="absolute right-4 top-4 flex z-1 gap-2" v-if="showIcon">
+      <div class="absolute right-4 top-4 flex z-1 gap-2" v-if="showIcon && !androidApp">
         <MiniProgram v-if="settingStore.load && !settingStore.first" />
-
-        <div class="relative group">
-          <BaseIcon>
-            <IconPhTranslate />
-          </BaseIcon>
-          <div
-            class="space-y-2 pt-2 absolute z-2 right-0 opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 transition-all duration-150 pointer-events-none group-hover:pointer-events-auto"
-          >
-            <div class="card mb-2 py-4 px-6 space-y-3">
-              <div v-for="locale in locales" @click="setLocale(locale.code)" class="w-full cp break-keep black-link">
-                {{ locale.name }}
-              </div>
-            </div>
-          </div>
-        </div>
 
         <BaseIcon
           :title="`${$t('toggle_theme')}(${settingStore.shortcutKeyMap[ShortcutKey.ToggleTheme]})`"
@@ -201,11 +196,79 @@ function onMouseLeave() {
         </BaseIcon>
       </div>
     </div>
+    <AndroidSelectionActions v-if="androidApp" />
     <WordCollectPopover />
   </div>
 </template>
 
 <style scoped lang="scss">
+// 手机原生按钮采用各页面的视觉样式，同时保留浏览器的键盘焦点。
+:where(.layout.android-shell) :deep(button) {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+}
+
+.layout.android-shell {
+  // 手机外壳统一提供页面、导航和操作色，桌面样式沿用原变量。
+  --android-canvas: #f5f5f7;
+  --android-surface: #fff;
+  --android-text: #1d1d1f;
+  --android-muted: #626267;
+  --android-line: #e5e5ea;
+  --android-accent: #0071e3;
+  --android-on-accent: #fff;
+  --android-tint: #eaf3fd;
+  --android-shadow: rgba(29, 29, 31, 0.11);
+  --android-gutter: clamp(16px, 5vw, 24px);
+  --android-header-height: 56px;
+  --android-bottom-nav-height: 56px;
+  --btn-primary: var(--android-accent);
+  --btn-primary-hover: var(--android-accent);
+  --btn-orange: var(--android-tint);
+  --btn-orange-hover: var(--android-tint);
+  display: block;
+  min-height: 100dvh;
+  background: var(--android-canvas);
+  color: var(--android-text);
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+
+  .main-content { box-sizing: border-box; padding-top: 0; min-height: calc(100dvh - var(--android-header-height)); }
+  &.android-tab-page .main-content { padding-bottom: var(--android-bottom-nav-height); }
+  :deep(.page) { width: 100%; max-width: 720px; margin: 0; padding: 12px 0 20px; min-height: 0; }
+  :deep(.page > .card) { margin: 0 var(--android-gutter) 14px; border: 1px solid var(--android-line); border-radius: 22px; box-shadow: none; background: var(--android-surface); }
+  :deep(.android-list) { display: block; }
+  :deep(.android-task-heading) { flex-wrap: wrap; gap: 8px 16px; }
+  :deep(.android-task-heading > div) { flex-wrap: wrap; }
+  :deep(.android-task-heading .text-xl) { white-space: nowrap; }
+  :deep(.base-button.orange) { color: var(--android-accent); }
+  :deep(.base-button.primary) { color: var(--android-on-accent); }
+  :deep(.android-screen-link) { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; margin-top: 12px; border-radius: 24px; background: var(--android-accent); color: var(--android-on-accent); font-weight: 600; }
+  :deep(.library) { max-width: 720px; padding-inline: var(--android-gutter); }
+  :deep(.library h1) { font-size: 32px; font-weight: 700; letter-spacing: -0.035em; }
+  :deep(.library > p) { color: var(--android-muted); }
+  :deep(.shelf) { display: block; overflow: hidden; border: 1px solid var(--android-line); border-radius: 22px; background: var(--android-surface); }
+  :deep(.shelf:empty) { display: none; }
+  :deep(.shelf .cover) { min-height: 68px; flex-direction: row; align-items: center; gap: 12px; padding: 12px 16px; background: transparent; color: var(--android-text); border: 0; border-radius: 0; box-shadow: none; }
+  :deep(.shelf .cover + .cover) { border-top: 1px solid var(--android-line); }
+  :deep(.shelf .cover span) { flex: none; margin: 0; color: var(--android-muted); }
+}
+
+html.dark .layout.android-shell {
+  --android-canvas: #101012;
+  --android-surface: #1d1d1f;
+  --android-text: #f5f5f7;
+  --android-muted: #a5a5aa;
+  --android-line: #343437;
+  --android-accent: #68b6ff;
+  --android-on-accent: #151517;
+  --android-tint: #172c41;
+  --android-shadow: rgba(0, 0, 0, 0.32);
+}
+
 .layout {
   width: 100%;
   height: 100%;
